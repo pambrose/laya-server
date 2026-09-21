@@ -1,0 +1,24 @@
+# Build artifacts: build/ holds multi-GB ONNX exports.
+build/
+dist/
+*.egg-info
+
+# The host virtualenv is macOS-specific and must never leak into the image.
+.venv/
+
+__pycache__/
+*.py[oc]
+.pytest_cache/
+.ruff_cache/
+
+.git/
+.github/
+.idea/
+.remember/
+
+# Not needed at runtime.
+tests/
+scripts/
+docs/
+Makefile
+.python-version

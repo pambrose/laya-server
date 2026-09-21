@@ -1,0 +1,71 @@
+[project]
+name = "laya-server"
+version = "0.1.0"
+description = "A drop-in replacement for TypeSafe's Jev API, backed by local Laya checkpoints"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Paul Ambrose" }]
+dependencies = [
+    "fastapi>=0.141.1",
+    "laya>=0.3.4",
+    "uvicorn[standard]>=0.53.0",
+]
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.13.0",
+    "onnx>=1.23.0",
+    "onnxruntime>=1.30.0",
+    "onnxscript>=0.7.2",
+    "pytest>=9.1.1",
+    "ruff>=0.16.8",
+    "typesafe-sdk>=0.7.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/laya_server"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: tests that load a real Laya checkpoint (deselect with -m 'not slow')",
+]
+filterwarnings = [
+    # Any warning the suite does not explicitly allow is a failure, so new ones
+    # cannot accumulate unnoticed.
+    "error",
+    # starlette 1.6.0 (the latest release) annotates _PortalFactoryType with the
+    # deprecated anyio.abc.BlockingPortal alias at import time. It is a type
+    # annotation only, the alias still resolves to the same class, and there is
+    # no newer starlette to upgrade to. Drop this once starlette moves to
+    # anyio.from_thread.BlockingPortal.
+    "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",
+]
+
+[tool.ruff]
+# Pinned explicitly rather than inherited: ruff's defaults shift between
+# releases, and CI must lint exactly what a developer's machine does.
+target-version = "py312"
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # import sorting
+    "UP",   # pyupgrade: modern syntax for the pinned Python
+    "B",    # bugbear: likely bugs
+    "BLE",  # blind excepts (scripts/ suppresses these deliberately)
+    "SIM",  # simplifications
+    "RUF",  # ruff's own rules
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["laya_server"]

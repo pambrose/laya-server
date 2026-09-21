@@ -1,0 +1,71 @@
+name: tests
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # Weekly, so the checkpoint-backed suite keeps exercising the real model
+    # even in quiet weeks.
+    - cron: "17 6 * * 1"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fast:
+    name: fast suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.1.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      # --locked fails if uv.lock is stale, so CI also guards the lockfile.
+      # uv provisions the Python pinned in .python-version itself.
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Lint
+        run: |
+          uv run ruff check src tests scripts
+          uv run ruff format --check src tests scripts
+
+      - name: Run tests
+        run: uv run pytest -m "not slow"
+
+  integration:
+    name: integration (real checkpoint)
+    # Downloads ~843MB of model weights, so it is kept off the per-push path
+    # and runs on demand and on the weekly schedule instead.
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.1.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Cache Laya checkpoints
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/huggingface
+          key: huggingface-${{ runner.os }}-english
+          restore-keys: huggingface-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Run tests against a real checkpoint
+        run: uv run pytest -m slow
