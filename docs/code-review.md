@@ -3,7 +3,7 @@
 Open issues found by reviewing `src/laya_server/`. Tick a box when the issue is fixed and update
 the **Status** line in its section. Numbers are stable — do not renumber when items are closed.
 
-_Last updated: 2026-09-20. 18 issues: 18 fixed, 0 open._
+_Last updated: 2026-09-21. 19 issues: 19 fixed, 0 open._
 _Issues 12-18 came from an independent review pass; each was re-verified before being recorded._
 
 ## Summary
@@ -26,6 +26,7 @@ _Issues 12-18 came from an independent review pass; each was re-verified before 
 - [x] **16.** `/ready` discloses device and checkpoint inventory unauthenticated while `/v1/models` needs a key.
 - [x] **17.** The CI job display names changed, which can strand branch-protection required checks.
 - [x] **18.** Model names are duplicated as literals in `models.py` rather than derived from `engine.py`.
+- [x] **19.** The backpressure tests hang intermittently, cancelling CI after 18 minutes.
 
 ---
 
@@ -292,3 +293,31 @@ to `engine.py` alone would make `/v1/models` under-report a name the API accepts
 `test_models.py` catches that in CI, so this is a maintainability trap rather than a live bug.
 
 **Fix:** build the mapping keyed off the engine constants so the two cannot diverge.
+
+## 19. Backpressure tests hang intermittently
+
+**Severity:** high · **Status:** fixed — wait on the pending counter, drain instead of cancel
+· `tests/test_engine.py`
+
+Found after merge, when the first CI run on `master` was **cancelled after 18 minutes** with
+`lint and types` and `tests (py3.13)` green but `tests (py3.12)` stuck in `Run tests`. Reproduced
+locally: the fast suite, which takes 0.8s, hung on roughly **1 run in 6**, and the two
+`TestBackpressure` suites hung 4/10 and 2/15 in isolation.
+
+Regression introduced by the fix for issue 5. `predict` now awaits
+`run_in_threadpool(validate_budget, ...)` *before* incrementing the pending counter, so the
+tests' single `await asyncio.sleep(0)` no longer guaranteed the requests had registered. The
+tests then cancelled tasks that could still be inside the threadpool, and a cancellation that
+lands there can stall teardown indefinitely.
+
+A second, subtler bug in the same tests: the first attempt waited for two requests to enter the
+patched inference function, which can never happen — the per-checkpoint lock means only one
+request reaches the forward pass while the rest queue behind it.
+
+**Fix:** `_saturate` polls `eng._pending` until the expected number of requests is counted — the
+same value the overload check reads — under an `asyncio.timeout`. `_drain` releases the blocked
+requests and awaits them rather than cancelling. 20 consecutive fast-suite runs are clean.
+
+**Worth noting:** an earlier local stall in this session was dismissed as contention between
+background processes. It was this. A hang that reproduces one time in six is easy to explain away,
+which is exactly why it reached CI.
