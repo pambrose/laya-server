@@ -1,3 +1,5 @@
+import pytest
+
 from laya_server.config import Settings
 
 
@@ -36,3 +38,26 @@ class TestEnvOverrides:
 
     def test_max_queue_depth_override(self):
         assert Settings.from_env({"LAYA_SERVER_MAX_QUEUE": "7"}).max_queue_depth == 7
+
+
+class TestMalformedValues:
+    """Issue 11: int() raised a bare ValueError naming neither the variable nor
+    the value, so a typo produced an opaque startup traceback."""
+
+    def test_non_numeric_queue_depth_names_the_variable(self):
+        with pytest.raises(ValueError) as exc:
+            Settings.from_env({"LAYA_SERVER_MAX_QUEUE": "lots"})
+        msg = str(exc.value)
+        assert "LAYA_SERVER_MAX_QUEUE" in msg
+        assert "lots" in msg
+
+    def test_non_numeric_body_limit_names_the_variable(self):
+        with pytest.raises(ValueError) as exc:
+            Settings.from_env({"LAYA_SERVER_MAX_BODY_BYTES": "big"})
+        assert "LAYA_SERVER_MAX_BODY_BYTES" in str(exc.value)
+
+    def test_valid_values_still_parse(self):
+        s = Settings.from_env(
+            {"LAYA_SERVER_MAX_QUEUE": "7", "LAYA_SERVER_MAX_BODY_BYTES": "2048"}
+        )
+        assert (s.max_queue_depth, s.max_body_bytes) == (7, 2048)

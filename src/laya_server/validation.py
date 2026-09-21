@@ -13,7 +13,7 @@ import json
 from collections.abc import Mapping
 from typing import Any
 
-from laya.common import build_sequence, serialize_state
+from laya.common import build_sequence, render_options, serialize_state
 
 from .errors import ValidationFailed
 
@@ -94,7 +94,7 @@ def validate_questions(questions: Any) -> None:
         validate_question(qid, question)
 
 
-def _to_internal(qdef: Mapping) -> dict:
+def _to_internal(qdef: Mapping[str, Any]) -> dict[str, Any]:
     """Mirror of `laya.Agent._to_internal` (agent.py:229-238).
 
     Reimplemented rather than called so budget checks never touch a private
@@ -110,7 +110,7 @@ def _to_internal(qdef: Mapping) -> dict:
     return {"t": t, "ins": ins, "crit": crit}
 
 
-def _room_for_state(agent: Any, qdef: Mapping) -> int:
+def _room_for_state(agent: Any, qdef: Mapping[str, Any]) -> int:
     """Tokens of state this question leaves room for on this checkpoint.
 
     Derived by building the real sequence with an empty state rather than
@@ -120,12 +120,35 @@ def _room_for_state(agent: Any, qdef: Mapping) -> int:
     max_len = agent.cfg.get("max_len", 512)
     head_max_len = agent.cfg.get("head_max_len", 192)
     empty, _ = build_sequence(agent.tok, "", _to_internal(qdef), max_len, head_max_len)
-    return max(0, max_len - len(empty))
+    return max(0, int(max_len) - len(empty))
+
+
+def _validate_options_fit(agent: Any, qid: str, qdef: Mapping[str, Any]) -> None:
+    """Reject options Laya cannot place inside head_max_len.
+
+    Laya raises a bare ValueError when the option markers do not all survive
+    the head budget (agent.py:262-263). Jev's documented 255-option ceiling is
+    far looser, so without this a legal-looking request reaches Laya and comes
+    back as a 500. The check mirrors Laya's own by building the sequence and
+    comparing marker count, so it cannot drift from build_sequence.
+    """
+    internal = _to_internal(qdef)
+    max_len = agent.cfg.get("max_len", 512)
+    head_max_len = agent.cfg.get("head_max_len", 192)
+    _, markers = build_sequence(agent.tok, "", internal, max_len, head_max_len)
+    wanted = len(render_options(internal))
+    if len(markers) != wanted:
+        _reject(
+            qid,
+            f"{wanted} options do not fit the model's {head_max_len}-token "
+            f"question budget; only {len(markers)} could be encoded. "
+            "Use fewer or shorter options",
+        )
 
 
 def validate_budget(
     agent: Any,
-    state: str | dict | list,
+    state: str | dict[str, Any] | list[Any],
     questions: Mapping[str, Any],
     checkpoint: str,
 ) -> None:
@@ -140,6 +163,8 @@ def validate_budget(
     state_tokens = len(agent.tok(text, add_special_tokens=False)["input_ids"])
 
     for qid, qdef in questions.items():
+        _validate_options_fit(agent, qid, qdef)
+
         room = _room_for_state(agent, qdef)
         if state_tokens > room:
             raise ValidationFailed(

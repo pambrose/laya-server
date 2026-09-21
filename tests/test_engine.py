@@ -171,3 +171,126 @@ class TestRouterConstruction:
         Engine.create(Settings.from_env({"LAYA_SERVER_PRELOAD": "english"}))
 
         assert routers[0].preloaded == ["english"]
+
+
+class TestLayaErrorsBecome422:
+    """Issue 1 backstop: Laya raises bare ValueError/KeyError for inputs the
+    validation layer has not learned about yet. None of them should reach the
+    client as a 500."""
+
+    def _engine_raising(self, exc):
+        agent = FakeInferenceAgent()
+
+        def boom(*_a, **_kw):
+            raise exc
+
+        agent.system_one = boom
+        return engine(FakeRouter(agents={"english": agent}))
+
+    @pytest.mark.parametrize(
+        "exc",
+        [
+            ValueError("question 'pick' options exceed head_max_len=192"),
+            KeyError("type"),
+            AttributeError("'NoneType' object has no attribute 'items'"),
+        ],
+    )
+    def test_laya_failure_is_reported_as_validation_failure(self, exc):
+        with pytest.raises(ValidationFailed):
+            predict(self._engine_raising(exc))
+
+    def test_the_message_mentions_the_underlying_problem(self):
+        exc = ValueError("question 'pick' options exceed head_max_len=192")
+        with pytest.raises(ValidationFailed) as got:
+            predict(self._engine_raising(exc))
+        assert "head_max_len" in str(got.value)
+
+    def test_unrelated_runtime_errors_still_propagate(self):
+        """A genuine server fault must stay a 500, not be mislabelled a client
+        error."""
+        with pytest.raises(RuntimeError):
+            predict(self._engine_raising(RuntimeError("CUDA out of memory")))
+
+
+class TestStateSerializedOnce:
+    """Issue 8: the state was JSON-serialized in validation and again by laya,
+    once per question."""
+
+    def test_inference_receives_the_already_serialized_state(self):
+        agent = FakeInferenceAgent()
+        router = FakeRouter(agents={"english": agent})
+        predict(engine(router), state={"body": "billed twice"})
+        sent_state, _ = agent.calls[0]
+        assert isinstance(sent_state, str), (
+            "laya would re-serialize a dict per question"
+        )
+        assert "billed twice" in sent_state
+
+    def test_routing_still_sees_the_original_structure(self):
+        """Language detection walks dict/list leaves and ignores keys
+        (lang.py:67-88), so it must not be handed the JSON text."""
+        router = FakeRouter()
+        predict(engine(router), state={"body": "billed twice"})
+        assert router.route_calls[0]["state"] == {"body": "billed twice"}
+
+
+class TestPerCheckpointBackpressure:
+    """Issue 9: one global counter meant a queue on one checkpoint returned 529
+    for a different, idle one."""
+
+    def test_a_busy_checkpoint_does_not_reject_an_idle_one(self):
+        from laya_server.config import Settings
+
+        release = asyncio.Event()
+        eng = Engine(FakeRouter(), Settings.from_env({"LAYA_SERVER_MAX_QUEUE": "2"}))
+
+        async def scenario():
+            async def slow(agent, state, questions):
+                await release.wait()
+                return None
+
+            eng._run_inference = slow
+            busy = [
+                asyncio.create_task(eng.predict("x", QUESTIONS, "english"))
+                for _ in range(2)
+            ]
+            await asyncio.sleep(0)
+
+            # english is saturated; multilingual is untouched and must serve.
+            async def quick(agent, state, questions):
+                return agent.system_one(state, questions)
+
+            eng._run_inference = quick
+            result = await eng.predict("x", QUESTIONS, "multilingual")
+            assert result.checkpoint == "multilingual"
+
+            release.set()
+            for t in busy:
+                t.cancel()
+
+        asyncio.run(scenario())
+
+    def test_a_saturated_checkpoint_still_rejects_its_own_overflow(self):
+        from laya_server.config import Settings
+
+        release = asyncio.Event()
+        eng = Engine(FakeRouter(), Settings.from_env({"LAYA_SERVER_MAX_QUEUE": "2"}))
+
+        async def scenario():
+            async def slow(agent, state, questions):
+                await release.wait()
+                return None
+
+            eng._run_inference = slow
+            busy = [
+                asyncio.create_task(eng.predict("x", QUESTIONS, "english"))
+                for _ in range(2)
+            ]
+            await asyncio.sleep(0)
+            with pytest.raises(Overloaded):
+                await eng.predict("x", QUESTIONS, "english")
+            release.set()
+            for t in busy:
+                t.cancel()
+
+        asyncio.run(scenario())

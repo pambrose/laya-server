@@ -12,7 +12,7 @@ class JevError(Exception):
     status_code = 500
     error_type = "api_error"
 
-    def body(self) -> dict:
+    def body(self) -> dict[str, dict[str, str]]:
         return {"error": {"type": self.error_type, "message": str(self)}}
 
 

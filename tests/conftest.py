@@ -62,7 +62,8 @@ class FakeRouter:
 
     def __init__(self, checkpoint="english", agents=None):
         self.checkpoint = checkpoint
-        self.agents = agents or {}
+        # Named as laya names it, so code reading the store works against both.
+        self._agents = agents or {}
         self.route_calls = []
         self.preloaded = []
 
@@ -77,8 +78,36 @@ class FakeRouter:
             "workflow": None,
         }
 
+    @property
+    def agents(self):
+        return self._agents
+
     def load(self, name):
-        return self.agents.setdefault(name, FakeInferenceAgent())
+        return self._agents.setdefault(name, FakeInferenceAgent())
 
     def preload(self, names=None):
         self.preloaded = list(names or [])
+
+
+class LoadedFakeRouter(FakeRouter):
+    """FakeRouter that reports resident checkpoints, as `laya.Router` does.
+
+    `loaded` mirrors laya's `_order` list and `load()` reorders it through the
+    same `_touch` semantics (router.py:169-185). The earlier version returned a
+    fixed list, which made it more forgiving than the real Router and hid a bug
+    where a read-only probe reordered what the next probe reported.
+    """
+
+    def __init__(self, loaded=("english",), **kw):
+        super().__init__(**kw)
+        self._order = list(loaded)
+
+    @property
+    def loaded(self):
+        return list(self._order)
+
+    def load(self, name):
+        if name in self._order:
+            self._order.remove(name)
+            self._order.append(name)
+        return super().load(name)
