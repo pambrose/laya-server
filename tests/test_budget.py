@@ -60,3 +60,49 @@ class TestPerQuestionBudget:
         }
         with pytest.raises(ValidationFailed):
             validate_budget(agent, state, {"q": bulky}, "english")
+
+
+class TestOptionBudget:
+    """Issue 1/2: Laya raises ValueError when a question's options do not fit
+    head_max_len (agent.py:263). Jev's 255-option limit is looser, so this must
+    be caught here or it reaches the client as a 500."""
+
+    @staticmethod
+    def _many_options(n):
+        return {
+            "pick": {
+                "type": "choice",
+                "instructions": "Which one?",
+                "criteria": {
+                    f"option_number_{i}": f"the {i}th choice" for i in range(n)
+                },
+            }
+        }
+
+    def test_options_that_overflow_the_head_are_rejected(self, agent):
+        with pytest.raises(ValidationFailed) as exc:
+            validate_budget(agent, "", self._many_options(200), "english")
+        assert "option" in str(exc.value).lower()
+
+    def test_rejected_even_when_the_state_is_empty(self, agent):
+        """The empty state is the case that previously reached Laya and 500'd,
+        because the state-size check trivially passes."""
+        with pytest.raises(ValidationFailed):
+            validate_budget(agent, "", self._many_options(200), "english")
+
+    def test_the_message_blames_the_options_not_the_state(self, agent):
+        """Issue 2: reporting 'state exceeds model budget: 1 tokens' sends the
+        caller to shrink the wrong thing."""
+        with pytest.raises(ValidationFailed) as exc:
+            validate_budget(agent, "hi", self._many_options(200), "english")
+        msg = str(exc.value).lower()
+        assert "option" in msg
+        assert "state exceeds" not in msg
+
+    def test_names_the_offending_question(self, agent):
+        with pytest.raises(ValidationFailed) as exc:
+            validate_budget(agent, "", self._many_options(200), "english")
+        assert "pick" in str(exc.value)
+
+    def test_a_reasonable_question_still_passes(self, agent):
+        validate_budget(agent, "billed twice", self._many_options(4), "english")

@@ -51,9 +51,11 @@ RUN mkdir -p "$HF_HOME"
 
 EXPOSE 8000
 
-# Liveness only: FastAPI serves its schema without running inference, so this
-# never waits on an inference lock. start-period covers checkpoint loading.
+# /ready takes no inference lock, so a container busy on a forward pass still
+# answers. Note that checkpoints are preloaded in the lifespan hook, which
+# uvicorn awaits before opening the socket: during the first download the probe
+# gets connection-refused, not a 503. start-period covers that window.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=300s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/openapi.json').read()"
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready').read()"
 
 CMD ["uvicorn", "laya_server.app:app", "--host", "0.0.0.0", "--port", "8000"]

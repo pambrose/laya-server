@@ -16,6 +16,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "httpx2>=2.13.0",
+    "mypy>=2.3.1",
     "onnx>=1.23.0",
     "onnxruntime>=1.30.0",
     "onnxscript>=0.7.2",
@@ -69,3 +70,15 @@ select = [
 
 [tool.ruff.lint.isort]
 known-first-party = ["laya_server"]
+
+[tool.mypy]
+python_version = "3.12"
+# Strict, but scoped to src/: py.typed publishes these signatures to consumers,
+# so they are the ones that have to be right. Tests and scripts are not shipped.
+files = ["src"]
+strict = true
+
+[[tool.mypy.overrides]]
+# laya ships no type information and has no stubs (no py.typed in the package).
+module = ["laya.*"]
+ignore_missing_imports = true

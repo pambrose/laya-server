@@ -15,8 +15,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  fast:
-    name: fast suite
+  lint:
+    name: lint and types
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -29,17 +29,41 @@ jobs:
           cache-dependency-glob: uv.lock
 
       # --locked fails if uv.lock is stale, so CI also guards the lockfile.
-      # uv provisions the Python pinned in .python-version itself.
       - name: Install dependencies
         run: uv sync --locked
 
-      - name: Lint
+      - name: Ruff
         run: |
           uv run ruff check src tests scripts
           uv run ruff format --check src tests scripts
+          uv run python scripts/toc.py --check
+
+      - name: Mypy
+        run: uv run mypy
+
+  fast:
+    name: tests (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # Every version pyproject's requires-python claims to support.
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.1.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install dependencies
+        run: uv sync --locked --python ${{ matrix.python-version }}
 
       - name: Run tests
-        run: uv run pytest -m "not slow"
+        run: uv run --python ${{ matrix.python-version }} pytest -m "not slow"
 
   integration:
     name: integration (real checkpoint)

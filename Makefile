@@ -25,8 +25,8 @@ UVICORN := uv run uvicorn laya_server.app:app --host $(HOST) --port $(PORT)
 ENV := LAYA_SERVER_PRELOAD=$(PRELOAD)
 
 .DEFAULT_GOAL := help
-.PHONY: help install lock check-lock lint format test test-slow test-all \
-        run dev smoke docker-build docker-run docker-buildx docker-login \
+.PHONY: help install lock check-lock lint typecheck format toc test test-slow test-all \
+        run dev smoke docker-build docker-run docker-login docker-buildx \
         docker-push build clean ci
 
 help: ## List available targets
@@ -42,13 +42,21 @@ lock: ## Refresh uv.lock
 check-lock: ## Fail if uv.lock is stale (what CI enforces)
 	uv sync --locked
 
-lint: ## Check style and formatting without changing anything
+lint: ## Check style, formatting, and that the README TOC is current
 	uv run ruff check $(SOURCES)
 	uv run ruff format --check $(SOURCES)
+	uv run python scripts/toc.py --check
 
-format: ## Apply autofixes and reformat
+typecheck: ## Type-check src/ with mypy (strict)
+	uv run mypy
+
+format: ## Apply autofixes, reformat, and regenerate the README TOC
 	uv run ruff check --fix $(SOURCES)
 	uv run ruff format $(SOURCES)
+	uv run python scripts/toc.py
+
+toc: ## Regenerate the README table of contents
+	uv run python scripts/toc.py
 
 test: ## Run the fast suite (stubs Laya, no model download)
 	uv run pytest -m "not slow"
@@ -83,11 +91,11 @@ docker-run: ## Run the image, reusing a named checkpoint cache volume
 		-e LAYA_SERVER_PRELOAD=$(PRELOAD) \
 		$(IMAGE):$(TAG)
 
-docker-buildx: ## Cross-build for every target platform without pushing
-	docker buildx build --platform $(PLATFORMS) -t $(IMAGE_REF):$(VERSION) .
-
 docker-login: ## Log in to the registry (needed once before docker-push)
 	docker login $(REGISTRY)
+
+docker-buildx: ## Cross-build for every target platform without pushing
+	docker buildx build --platform $(PLATFORMS) -t $(IMAGE_REF):$(VERSION) .
 
 docker-push: ## Build multi-arch and PUBLISH to the registry (public!)
 	@echo "About to publish:"
@@ -104,8 +112,8 @@ build: ## Build the sdist and wheel
 	uv build
 
 clean: ## Remove build and test artifacts
-	rm -rf dist build .pytest_cache .ruff_cache
+	rm -rf dist build .pytest_cache .ruff_cache .mypy_cache
 	find . -name __pycache__ -type d -not -path './.venv/*' -exec rm -rf {} +
 	find . -name '*.egg-info' -type d -not -path './.venv/*' -exec rm -rf {} +
 
-ci: check-lock lint test ## Run what CI runs on a pull request
+ci: check-lock lint typecheck test ## Run what CI runs on a pull request

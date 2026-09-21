@@ -9,5 +9,10 @@ wheels/
 # Virtual environments
 .venv
 
+# Tool caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
 # The global gitignore excludes *.lock; an application's lockfile belongs in git.
 !uv.lock

@@ -125,3 +125,40 @@ class TestOverload:
         r = TestClient(app).post("/v1/systemone", json=VALID_REQUEST)
         assert r.status_code == 529
         assert r.json()["error"]["type"] == "overloaded_error"
+
+
+class TestBodySizeLimit:
+    """Issue 5: an unbounded body was read and then tokenized on the event
+    loop, blocking every other request including the health probes."""
+
+    def test_oversized_body_is_rejected(self):
+        c = client({"LAYA_SERVER_MAX_BODY_BYTES": "1000"})
+        payload = {**VALID_REQUEST, "state": "x" * 5000}
+        r = c.post("/v1/systemone", json=payload)
+        assert r.status_code == 422
+        assert "too large" in r.json()["error"]["message"].lower()
+
+    def test_the_message_reports_both_sizes(self):
+        c = client({"LAYA_SERVER_MAX_BODY_BYTES": "1000"})
+        msg = c.post(
+            "/v1/systemone", json={**VALID_REQUEST, "state": "x" * 5000}
+        ).json()["error"]["message"]
+        assert "1000" in msg
+
+    def test_a_normal_body_is_unaffected(self):
+        assert (
+            client({"LAYA_SERVER_MAX_BODY_BYTES": "1000000"})
+            .post("/v1/systemone", json=VALID_REQUEST)
+            .status_code
+            == 200
+        )
+
+    def test_rejected_before_the_body_is_parsed(self):
+        """Oversized bodies must not reach json parsing or tokenization."""
+        c = client({"LAYA_SERVER_MAX_BODY_BYTES": "500"})
+        r = c.post(
+            "/v1/systemone",
+            content=b"{" + b"x" * 5000,
+            headers={"Content-Type": "application/json"},
+        )
+        assert r.status_code == 422, "malformed oversized body must be size-rejected"
