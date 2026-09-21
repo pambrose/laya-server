@@ -4,7 +4,7 @@
 [![python](https://img.shields.io/badge/python-3.12%20%7C%203.13-blue)](pyproject.toml)
 [![license](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
-An proof of concept implementation of [TypeSafe's Jev API](https://docs.typesafe.ai/api), backed by local
+A proof of concept implementation of [TypeSafe's Jev API](https://docs.typesafe.ai/api), backed by local
 [Laya](https://github.com/NandhaKishorM/laya) checkpoints.
 
 ## Contents

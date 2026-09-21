@@ -102,30 +102,54 @@ class TestConcurrency:
         assert set(order) == {"english", "multilingual"}
 
 
+async def _saturate(eng, count, checkpoint):
+    """Start `count` requests and wait until the engine counts them as pending.
+
+    `predict` awaits the threadpool for budget validation before it registers
+    as pending, so a single `await asyncio.sleep(0)` does not mean the requests
+    have arrived; the assertion that follows would then be racy. Waiting on the
+    counter is also the right condition rather than waiting for inference to
+    start: the per-checkpoint lock means only the first request reaches the
+    forward pass, while the rest queue behind it -- all of them pending.
+    """
+    tasks = [
+        asyncio.create_task(eng.predict("x", QUESTIONS, checkpoint))
+        for _ in range(count)
+    ]
+    async with asyncio.timeout(10):
+        while sum(eng._pending.values()) < count:
+            await asyncio.sleep(0.01)
+    return tasks
+
+
+async def _drain(tasks, release):
+    """Let the blocked requests finish, then await them. Cancelling a task that
+    is inside the threadpool can hang; releasing it cannot."""
+    release.set()
+    async with asyncio.timeout(10):
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
 class TestBackpressure:
     def test_saturated_queue_is_rejected_as_overloaded(self):
         from laya_server.config import Settings
 
-        release = asyncio.Event()
-
         eng = Engine(FakeRouter(), Settings.from_env({"LAYA_SERVER_MAX_QUEUE": "2"}))
 
         async def scenario():
+            release = asyncio.Event()
+
             async def slow(*_):
                 await release.wait()
                 return None
 
             eng._run_inference = slow  # block every in-flight request
-            inflight = [
-                asyncio.create_task(eng.predict("x", QUESTIONS, "jev-latest"))
-                for _ in range(2)
-            ]
-            await asyncio.sleep(0)
+            inflight = await _saturate(eng, 2, "jev-latest")
+
             with pytest.raises(Overloaded):
                 await eng.predict("x", QUESTIONS, "jev-latest")
-            release.set()
-            for t in inflight:
-                t.cancel()
+
+            await _drain(inflight, release)
 
         asyncio.run(scenario())
 
@@ -241,20 +265,17 @@ class TestPerCheckpointBackpressure:
     def test_a_busy_checkpoint_does_not_reject_an_idle_one(self):
         from laya_server.config import Settings
 
-        release = asyncio.Event()
         eng = Engine(FakeRouter(), Settings.from_env({"LAYA_SERVER_MAX_QUEUE": "2"}))
 
         async def scenario():
+            release = asyncio.Event()
+
             async def slow(agent, state, questions):
                 await release.wait()
                 return None
 
             eng._run_inference = slow
-            busy = [
-                asyncio.create_task(eng.predict("x", QUESTIONS, "english"))
-                for _ in range(2)
-            ]
-            await asyncio.sleep(0)
+            busy = await _saturate(eng, 2, "english")
 
             # english is saturated; multilingual is untouched and must serve.
             async def quick(agent, state, questions):
@@ -264,33 +285,28 @@ class TestPerCheckpointBackpressure:
             result = await eng.predict("x", QUESTIONS, "multilingual")
             assert result.checkpoint == "multilingual"
 
-            release.set()
-            for t in busy:
-                t.cancel()
+            await _drain(busy, release)
 
         asyncio.run(scenario())
 
     def test_a_saturated_checkpoint_still_rejects_its_own_overflow(self):
         from laya_server.config import Settings
 
-        release = asyncio.Event()
         eng = Engine(FakeRouter(), Settings.from_env({"LAYA_SERVER_MAX_QUEUE": "2"}))
 
         async def scenario():
+            release = asyncio.Event()
+
             async def slow(agent, state, questions):
                 await release.wait()
                 return None
 
             eng._run_inference = slow
-            busy = [
-                asyncio.create_task(eng.predict("x", QUESTIONS, "english"))
-                for _ in range(2)
-            ]
-            await asyncio.sleep(0)
+            busy = await _saturate(eng, 2, "english")
+
             with pytest.raises(Overloaded):
                 await eng.predict("x", QUESTIONS, "english")
-            release.set()
-            for t in busy:
-                t.cancel()
+
+            await _drain(busy, release)
 
         asyncio.run(scenario())
