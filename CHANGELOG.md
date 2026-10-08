@@ -7,6 +7,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.2.0] - 2026-10-08
+
 ### Changed
 
 - Upgraded laya from 0.3.4 to 0.4.1; the minimum is now `laya>=0.4.1`. Answers on english and
@@ -90,5 +94,6 @@ See [the README](README.md#known-divergences-from-jev): a much smaller context w
 non-comparable `usage.input_tokens`, silent option-text truncation, and answers that come from
 Laya rather than Jev.
 
-[Unreleased]: https://github.com/pambrose/laya-server/compare/0.1.0...HEAD
+[Unreleased]: https://github.com/pambrose/laya-server/compare/0.2.0...HEAD
+[0.2.0]: https://github.com/pambrose/laya-server/compare/0.1.0...0.2.0
 [0.1.0]: https://github.com/pambrose/laya-server/releases/tag/0.1.0
