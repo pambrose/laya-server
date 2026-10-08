@@ -267,8 +267,29 @@ Variables you can override on any of these:
 
 ```bash
 make docker-login          # once per registry
-make docker-buildx         # optional: confirm both platforms build
+make release               # gate, test, smoke-test the image, then publish
+```
+
+`make release` stops at the first step that fails, so nothing is published unless all of these
+pass:
+
+1. `release-check`: the checkout is clean and matches `origin/master`, `CHANGELOG.md` has a
+   section for the version, any git tag for the version points at `HEAD`, and that version is
+   not already on the registry. A published version is never overwritten.
+2. `make ci` and `make test-slow`: the full suite, including a real checkpoint.
+3. `docker-build` and `docker-smoke`: builds the image for this machine, runs it, waits for
+   `/ready`, and sends a real request. The first run downloads a checkpoint into the
+   `laya-checkpoints` volume; `SMOKE_TIMEOUT` (default 900 seconds) bounds the wait.
+4. `docker-push`: the multi-arch build and push, with the confirmation described below.
+5. `docker-verify`: confirms the published version carries every platform in `PLATFORMS`.
+
+It does not create the git tag or the GitHub release; do those once the image is out. The
+individual steps also work on their own:
+
+```bash
+make docker-buildx         # confirm both platforms build, without pushing
 make docker-push           # builds multi-arch, then publishes
+make docker-verify         # check what the registry now holds
 ```
 
 `docker-push` publishes two tags — the version read from `pyproject.toml` and `latest` — for

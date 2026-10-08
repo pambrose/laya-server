@@ -44,6 +44,12 @@ the image at ~1.6GB instead of ~2.7GB; triton alone is 813MB of GPU kernel compi
 tagged with the `pyproject.toml` version and `latest`. It confirms before pushing. Version
 bumps come from `pyproject.toml`; the Makefile reads it, so there is no second place to edit.
 
+Publish with `make release`, not a bare `docker-push`. In order, it runs `release-check`, `ci`,
+`test-slow`, a local `docker-build`, `docker-smoke`, `docker-push` and `docker-verify`, and
+stops at the first failure. `release-check` requires a clean, up-to-date `master`, a CHANGELOG
+section for the version, no `VERSION` tag on another commit, and no image already published
+under that version. It does not create the git tag or GitHub release; do those afterwards.
+
 ## Architecture
 
 Request flow through `src/laya_server/`:
