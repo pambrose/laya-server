@@ -8,13 +8,18 @@ that exported all three to ONNX and checked them against Laya's own output.
 payload exactly, so any language with an ONNX Runtime binding can serve Laya in-process. ONNX
 Runtime on CPU also turned out to be about twice as fast as PyTorch.
 
+The spike ran against laya 0.3.4. Under laya 0.4.1 the `english` export and its payload parity
+were re-run and still match exactly (see [Spike results](#spike-results)); line references below
+are to 0.4.1. laya now also ships its own ONNX runtime (`ONNXAgent`, `laya.load(backend="onnx")`,
+`onnx_agent.py`) using the same five inputs and two outputs.
+
 ## What the model actually is
 
 This is the constraint that decides everything else. Laya is **not** a stock HuggingFace model,
 so "load the safetensors in language X" does not work — `AutoModel` alone gives you the encoder
 and none of the decision logic.
 
-`DecisionModel` (`common.py:89`) is a standard **ModernBERT** encoder plus a custom head:
+`DecisionModel` (`common.py:574`) is a standard **ModernBERT** encoder plus a custom head:
 
 | Component | Definition |
 | --- | --- |
@@ -30,12 +35,17 @@ The forward signature is five tensors in, two out:
 (input_ids, attention_mask, marker_pos, marker_mask, qtype) -> (logits, act_logits)
 ```
 
+Since 0.4 `forward` also takes optional `position_ids` and `option_ids` for a "parallel" option
+layout. It is opt-in per checkpoint (`option_layout` in the config), and none of the published
+checkpoints use it, so the five-input graph is still the whole contract.
+
 Every operation in the head is ordinary — gather, softmax, LayerNorm, GELU, Linear,
 masked_fill. The portability problem is packaging, not mathematics.
 
 ### How one question becomes one forward pass
 
-`build_sequence` (`common.py:49`) lays out each question as:
+`build_sequence` (`common.py:156`, head built by `build_head` at `common.py:225`) lays out each
+question as:
 
 ```
 [CLS] <type> question: <instructions> [SEP] [MASK] opt0 [MASK] opt1 ... [SEP] <state> [SEP]
@@ -61,18 +71,22 @@ likeliest place for a silent divergence and it turned out fine.
 
 ## The three pieces any port must reproduce
 
-1. **Tokenize and build the sequence** (`common.py:49`). The risky one. A probability-identical
+1. **Tokenize and build the sequence** (`common.py:156`). The risky one. A probability-identical
    port has to match the 48-token cap per option, the `opt_budget < 16` re-truncation, the
    `head_max_len` clamp via `max(8, opt_budget)`, the `.replace(mask_tok, " ")` stripping on
-   every text field, left vs right state truncation, and the final `ids[:max_len]` plus
-   `markers < max_len` filter.
+   every text field, left vs right state truncation (a list state keeps its newest turns), and
+   the final `ids[:max_len]` plus `markers < max_len` filter. Upstream of it, `_to_internal`
+   (`agent.py:1108-1130`) renders structured instructions with `json.dumps(..., ensure_ascii=False)`,
+   lowercases noul criteria keys, and `render_options` stringifies choice labels.
 2. **The forward pass.** The easy one — this is what the ONNX graph carries.
-3. **Postprocess** (`agent.py:294-343`). Per-bucket temperature, stable softmax, entropy
-   confidence `1 - H(p)/log(k)`, expected value for `score`, `p[1]` for `noul`. About 45 lines
+3. **Postprocess** (`agent.py:1331-1407`). Per-bucket temperature (clamped, see below), stable
+   softmax, entropy confidence `1 - H(p)/log(k)`, expected value for `score`, `p[1]` for `noul`,
+   and since 0.4 an `answer_confidence` of `max(p)` on every answer. Score `legend` values are
+   rendered with `render_criterion`, so an object level comes back as JSON text. About 50 lines
    of arithmetic.
 
-For `Router` parity, add `lang.py` (182 lines of dependency-free script and language detection)
-and `router.py:241 route()`. A server can skip both by passing `model=` explicitly.
+For `Router` parity, add `lang.py` (865 lines of dependency-free script and language detection)
+and `router.py:1112 route()`. A server can skip both by passing `model=` explicitly.
 
 ### Temperature is not optional
 
@@ -82,10 +96,15 @@ Each checkpoint carries `temperature` (a 3-element list indexed by question type
 
 This matters more than it looks. `typed-decisions` has near-neutral base temperatures
 (~1.01–1.06) but inherits `english`'s full `temperature_by_options` table, so a 4-option choice
-is actually divided by 1.7602, not ~1.01. An 11-option choice is divided by 0.1006, which
-sharpens the distribution dramatically. `multilingual` ships an empty table and flat 1.0
+is actually divided by 1.7602, not ~1.01. `multilingual` ships an empty table and flat 1.0
 temperatures, so it applies no scaling at all. A port that ignores `temperature_by_options`
 produces plausible-looking but wrong probabilities on two of the three checkpoints.
+
+Since 0.4, laya also **clamps** every temperature into `[0.5, 5.0]` at load (`common.py:824-843`;
+non-numbers, NaN and inf become 1.0) and warns when it does. The shipped `choice:11+` entry is
+0.1006, so an 11-option choice on `english` or `typed-decisions` is divided by 0.5, not by the
+value in the config file. A port must clamp too: reading the raw config reproduces 0.3.4's much
+sharper probabilities, not today's.
 
 ## Options for other languages
 
@@ -133,7 +152,12 @@ export and LibTorch is a heavy native dependency. No advantage over B here.
 ## Spike results
 
 Run on macOS (Darwin 27), Python 3.12.8, torch 2.14.0, transformers 5.17.0, onnx 1.23.0,
-onnxruntime 1.30.0, onnxscript 0.7.2. CPU execution provider, fp32.
+onnxruntime 1.30.0, onnxscript 0.7.2, against laya 0.3.4. CPU execution provider, fp32.
+
+Re-run for `english` against laya 0.4.1 (onnx 1.23.1, otherwise identical): logit diff 1.6e-05,
+prob diff 2.3e-06, payload parity 6/6 exact, after porting the postprocess changes above. The
+pre-0.4 `verify_parity.py` fails all six cases against 0.4.1. `typed-decisions` and
+`multilingual` have not been re-run.
 
 | Checkpoint | Export | ONNX size | max abs logit diff | max abs prob diff | Payload parity |
 | --- | --- | --- | --- | --- | --- |
@@ -148,7 +172,8 @@ the axes are genuinely dynamic rather than frozen.
 **Payload parity** is the stronger claim. `scripts/verify_parity.py` reimplements collate and
 postprocess in plain numpy with no torch, runs the exported graph, and compares the complete
 rounded response against `Agent.system_one` — `choice`, `score`, `noul`, every `probabilities`
-map, `confidence`, and the `action` block. All six cases matched exactly on all three
+map, `confidence`, `answer_confidence`, the `action` block, and the two `usage` fields the
+server sends. All six cases matched exactly on all three
 checkpoints: short and long text, dict and plain-string state, an 11-option choice (exercising
 the `choice:11+` bucket), CJK and accented Unicode, and empty input.
 
@@ -182,8 +207,8 @@ Three traps, each of which fails in a way that looks like something else.
 
 One more, already handled upstream: ModernBERT's `torch.compile` decorators block
 `torch.onnx.export`, which is what Optimum's ModernBERT support had to work around. Laya
-already disables this at `agent.py:190` (`reference_compile = False`) for unrelated latency
-reasons, so the prerequisite is satisfied by the library as shipped.
+already disables this at `agent.py:690` (`reference_compile = compile`, `False` by default) for
+unrelated latency reasons, so the prerequisite is satisfied by the library as shipped.
 
 ## Reproducing
 

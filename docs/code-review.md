@@ -3,7 +3,8 @@
 Open issues found by reviewing `src/laya_server/`. Tick a box when the issue is fixed and update
 the **Status** line in its section. Numbers are stable — do not renumber when items are closed.
 
-_Last updated: 2026-09-21. 19 issues: 19 fixed, 0 open._
+_Last updated: 2026-10-08. 20 issues: 20 fixed, 0 open._
+_Line references in issues 1-19 are to laya 0.3.4; notes marked **laya 0.4.1** record what changed._
 _Issues 12-18 came from an independent review pass; each was re-verified before being recorded._
 
 ## Summary
@@ -27,6 +28,7 @@ _Issues 12-18 came from an independent review pass; each was re-verified before 
 - [x] **17.** The CI job display names changed, which can strand branch-protection required checks.
 - [x] **18.** Model names are duplicated as literals in `models.py` rather than derived from `engine.py`.
 - [x] **19.** The backpressure tests hang intermittently, cancelling CI after 18 minutes.
+- [x] **20.** A list-form choice with an unhashable label returns **HTTP 500** instead of 422.
 
 ---
 
@@ -52,6 +54,9 @@ state=""          -> HTTP 500   Internal Server Error
 mirroring the `build_sequence`/`render_options` marker check, and raise `ValidationFailed`. As a
 backstop, catch `ValueError` from laya in `Engine.predict` and convert it to a 422 rather than
 letting any future laya error reach the client as a 500.
+
+**laya 0.4.1:** the error now comes from `agent.py:1161-1177` and names `max_len`, the ceiling
+that drops markers, rather than `head_max_len`. The server's check is unchanged in substance.
 
 ## 2. Option overflow reported as a state-size error
 
@@ -80,6 +85,9 @@ Note also that laya reports device downgrades and OOM fallbacks with bare `print
 
 **Fix:** apply the level in `create_app` (or the lifespan), and decide whether to capture laya's
 stdout into the logger. Alternatively drop the setting and its README row.
+
+**laya 0.4.1:** downgrades and fallbacks are now `RuntimeWarning`s on stderr
+(`agent.py:633-659, 1261`), not prints. They still bypass `logging`.
 
 ## 4. API key comparison is not constant-time
 
@@ -163,6 +171,10 @@ For a large state with several questions this is measurable duplicated work on e
 **Fix:** if this shows up in profiling, serialize once and thread the result through; it is not
 worth restructuring on speculation.
 
+**laya 0.4.1:** laya now serializes and tokenizes the state once per call, not per question
+(`agent.py:1149-1153`), so the server's pre-serialization was removed and the state is passed
+through as sent. Validation still tokenizes it once to check the budget.
+
 ## 9. Backpressure counter is global, locks are per-checkpoint
 
 **Severity:** low · **Status:** fixed — counters are per checkpoint · `engine.py`
@@ -211,6 +223,10 @@ silent downgrades; sampling one agent hides them for every other checkpoint.
 
 **Fix:** report a device per checkpoint, or the distinct set of devices in use.
 
+**laya 0.4.1:** an OOM fallback is now scoped to the request that hit it and the device restored
+afterwards (`agent.py:1255-1303`); only a failed restore sticks. The per-checkpoint map still shows
+a downgrade at load, which is the case that persists.
+
 ## 13. `/ready`'s 503 branch is unreachable in the container
 
 **Severity:** medium · **Status:** fixed — claims corrected in the Dockerfile and README; see the note below · `app.py`, `Dockerfile`, `README.md`
@@ -234,6 +250,10 @@ before a checkpoint is resident, pushing laya's unsynchronised cold load (`Route
 onto the request path on the event loop — the exact hazard the preload design exists to avoid.
 Making `/ready` meaningful during startup would require rejecting inference while not ready, which
 is a larger change than the reporting inaccuracy warranted.
+
+**laya 0.4.1:** `Router.load` is now synchronized (`router.py:851-910`), so a cold load is slow
+rather than unsafe. Preloading still keeps that latency off the request path. A preload list of
+only commas also falls back to all three now, since laya 0.4 reads `preload([])` as "none".
 
 ## 14. `engine.status()` is unguarded, so probe failures are 500
 
@@ -321,3 +341,18 @@ requests and awaits them rather than cancelling. 20 consecutive fast-suite runs 
 **Worth noting:** an earlier local stall in this session was dismissed as contention between
 background processes. It was this. A hang that reproduces one time in six is easy to explain away,
 which is exactly why it reached CI.
+
+## 20. Unhashable list label returns 500
+
+**Severity:** medium · **Status:** fixed — laya's own question check runs during validation
+· `validation.py`
+
+Found while auditing the laya 0.4.1 upgrade; present under 0.3.4 too. A choice question whose
+`criteria` is a list containing an unhashable label, such as `[["a"], "b"]` or `[{"a": 1}]`,
+passed `validate_questions`, then reached the budget check's `{c: None for c in crit}` conversion
+and raised `TypeError: unhashable type`. `validate_budget` runs outside the engine's
+`ValueError`/`TypeError` backstop, so the request returned 500.
+
+**Fix:** `validate_question` now calls laya's own `Agent._check_question` after Jev's rules. It
+refuses null, non-scalar and duplicate labels with a `ValueError` that becomes a 422, before any
+tokenizing. `tests/test_validation.py::TestLayasOwnRules` covers it.

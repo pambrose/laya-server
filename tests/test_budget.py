@@ -1,8 +1,11 @@
+import threading
+
 import pytest
+from laya.common import _TOKENIZE_LOCK
 
 from laya_server.errors import ValidationFailed
-from laya_server.validation import validate_budget
-from tests.conftest import FakeAgent
+from laya_server.validation import _room_for_state, validate_budget
+from tests.conftest import FakeAgent, FakeTokenizer
 
 NOUL = {"type": "noul", "instructions": "Is a refund requested?"}
 
@@ -64,8 +67,8 @@ class TestPerQuestionBudget:
 
 class TestOptionBudget:
     """Issue 1/2: Laya raises ValueError when a question's options do not fit
-    head_max_len (agent.py:263). Jev's 255-option limit is looser, so this must
-    be caught here or it reaches the client as a 500."""
+    the sequence (agent.py:1161-1177). Jev's 255-option limit is looser, so this
+    is caught here, before the request queues for a checkpoint."""
 
     @staticmethod
     def _many_options(n):
@@ -106,3 +109,52 @@ class TestOptionBudget:
 
     def test_a_reasonable_question_still_passes(self, agent):
         validate_budget(agent, "billed twice", self._many_options(4), "english")
+
+
+class TestMatchesLayasEncoding:
+    """The budget must be computed on exactly what laya will encode."""
+
+    def test_noul_criteria_case_does_not_change_the_room(self, agent):
+        """laya lowercases noul keys (agent.py:1114-1116). The server's old
+        mirror of `_to_internal` did not, so it saw no criteria at all and
+        over-reported the room by the length of both descriptions."""
+
+        def noul(true_key, false_key):
+            return {
+                "type": "noul",
+                "instructions": "Phishing?",
+                "criteria": {true_key: "a long description " * 5, false_key: "b"},
+            }
+
+        assert _room_for_state(agent, noul("TRUE", "False")) == _room_for_state(
+            agent, noul("true", "false")
+        )
+
+    def test_mask_token_text_in_state_is_not_counted(self, agent):
+        """laya replaces it with a space before encoding (agent.py:1149-1153)."""
+        room = _room_for_state(agent, NOUL)
+        state = "[MASK] " * 50 + " ".join(["word"] * room)
+        validate_budget(agent, state, {"q": NOUL}, "english")
+
+    def test_every_tokenizer_call_holds_layas_lock(self, agent):
+        """laya 0.4 enables truncation on the shared fast tokenizer while it
+        encodes options, mutating it. A call that skips laya's lock can race an
+        in-flight request's encode and fail with "Already borrowed"."""
+        held = []
+
+        def taken_elsewhere():
+            got = _TOKENIZE_LOCK.acquire(blocking=False)
+            if got:
+                _TOKENIZE_LOCK.release()
+            held.append(not got)
+
+        class Probe(FakeTokenizer):
+            def __call__(self, text, **kwargs):
+                probe = threading.Thread(target=taken_elsewhere)
+                probe.start()
+                probe.join()
+                return super().__call__(text, **kwargs)
+
+        agent.tok = Probe()
+        validate_budget(agent, "we were billed twice", {"q": NOUL}, "english")
+        assert held and all(held)

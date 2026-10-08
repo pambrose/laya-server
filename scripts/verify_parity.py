@@ -26,25 +26,47 @@ from laya.agent import Agent
 
 # build_sequence is the tokenizer-coupled half of the port; reuse it here so this script
 # isolates the ONNX + postprocess question. Porting it is tracked separately.
-from laya.common import build_sequence
+# render_criterion is the same JSON rendering build_sequence applies to criteria.
+from laya.common import build_sequence, render_criterion
 
 REPO = "convaiinnovations/laya"
 QTYPES = {"choice": 0, "score": 1, "noul": 2}
 QTYPE_NAMES = {v: k for k, v in QTYPES.items()}
+
+# laya clamps every temperature into this range at checkpoint load (common.py:824-843).
+# The shipped english and typed-decisions configs have choice:11+ = 0.1006, so the raw
+# config value is NOT what scores an 11+ option question; 0.5 is.
+TEMP_MIN, TEMP_MAX = 0.5, 5.0
 
 
 # ------------------------------------------------- port reference (no torch)
 
 
 def to_internal(qdef: dict) -> dict:
+    """agent.py:1108-1130, minus `labels`/`option_order`: Jev has no such fields."""
     t = qdef["type"]
     crit = qdef.get("criteria")
     if t == "choice" and isinstance(crit, list):
         crit = {c: None for c in crit}
+    elif t == "noul" and isinstance(crit, dict):
+        crit = {str(k).lower(): v for k, v in crit.items()}
     ins = qdef["instructions"]
     if not isinstance(ins, str):
-        ins = json.dumps(ins)
+        ins = json.dumps(ins, ensure_ascii=False)
     return {"t": t, "ins": ins, "crit": crit}
+
+
+def clamp_temperature(t: Any) -> float:
+    """Non-numbers (bools included), NaN and inf become 1.0; the rest is clamped."""
+    if isinstance(t, bool):
+        return 1.0
+    try:
+        t = float(t)
+    except (TypeError, ValueError):
+        return 1.0
+    if t != t or t in (math.inf, -math.inf):
+        return 1.0
+    return min(TEMP_MAX, max(TEMP_MIN, t))
 
 
 def collate_numpy(items: list[dict], pad_id: int) -> dict[str, np.ndarray]:
@@ -92,8 +114,11 @@ def postprocess(
     act_logits: np.ndarray,
     n_tokens: int,
 ) -> dict:
-    temperature = cfg.get("temperature", [1.0, 1.0, 1.0])
-    by_opts = cfg.get("temperature_by_options", {})
+    temperature = [clamp_temperature(t) for t in cfg.get("temperature", [1.0] * 3)]
+    by_opts = {
+        b: clamp_temperature(t)
+        for b, t in cfg.get("temperature_by_options", {}).items()
+    }
     e = np.exp(act_logits - act_logits.max(-1, keepdims=True))
     act = e / e.sum(-1, keepdims=True)
 
@@ -103,11 +128,13 @@ def postprocess(
         k = len(items[r]["markers"])
         qt = QTYPES[q["t"]]
         t_scale = by_opts.get(temp_bucket(qt, k), temperature[qt])
-        z = logits[r, :k] / max(1e-3, float(t_scale))
+        z = logits[r, :k] / t_scale
         p = np.exp(z - z.max())
         p = p / p.sum()
 
         conf = round(confidence_from_probs(p, k), 4)
+        # max(p) on every type; a binning map would remap it, but none ships by default.
+        answer_conf = round(float(np.clip(p[:k].max(), 0.0, 1.0)), 4)
         ext = {"act_probability": round(float(act[r, 0]), 4)}
 
         if q["t"] == "choice":
@@ -119,15 +146,19 @@ def postprocess(
                     kk: round(float(v), 4) for kk, v in zip(keys, p, strict=True)
                 },
                 "confidence": conf,
+                "answer_confidence": answer_conf,
                 "action": ext,
             }
         elif q["t"] == "score":
             answers[qid] = {
                 "type": "score",
                 "score": round(float((np.arange(k) * p).sum()), 4),
-                "legend": {str(i): c for i, c in enumerate(q["crit"])},
+                "legend": {
+                    str(i): render_criterion(c) for i, c in enumerate(q["crit"])
+                },
                 "probabilities": {str(i): round(float(v), 4) for i, v in enumerate(p)},
                 "confidence": conf,
+                "answer_confidence": answer_conf,
                 "action": ext,
             }
         else:
@@ -135,6 +166,7 @@ def postprocess(
                 "type": "noul",
                 "noul": round(float(p[1]), 4),
                 "confidence": round(max(float(p[1]), 1.0 - float(p[1])), 4),
+                "answer_confidence": answer_conf,
                 "action": ext,
             }
     return {
@@ -151,7 +183,15 @@ def onnx_system_one(sess, agent: Agent, state, questions: dict) -> dict:
     items = []
     for qid in qids:
         q = to_internal(questions[qid])
-        seq, markers = build_sequence(agent.tok, state, q, max_len, head_max_len)
+        # A conversation list keeps its newest turns when cut (agent.py:1141-1144).
+        seq, markers = build_sequence(
+            agent.tok,
+            state,
+            q,
+            max_len,
+            head_max_len,
+            truncate_left=isinstance(state, list),
+        )
         items.append({"ids": seq, "markers": markers, "qtype": QTYPES[q["t"]]})
     b = collate_numpy(items, agent.tok.pad_token_id)
     logits, act = sess.run(["logits", "act_logits"], {k: v for k, v in b.items()})
@@ -217,11 +257,18 @@ CASES: list[tuple[str, Any, dict]] = [
 ]
 
 
+# The usage fields this server sends. laya also reports truncation diagnostics, which
+# the server strips (translate.py) and a port therefore does not need.
+USAGE_KEYS = ("input_tokens", "output_tokens")
+
+
 def compare(ref: dict, got: dict) -> list[str]:
     """Exact comparison of the rounded payload, with `action` reported separately."""
     diffs = []
-    if ref["usage"] != got["usage"]:
-        diffs.append(f"usage: {ref['usage']} != {got['usage']}")
+    ref_usage = {k: ref["usage"][k] for k in USAGE_KEYS}
+    got_usage = {k: got["usage"][k] for k in USAGE_KEYS}
+    if ref_usage != got_usage:
+        diffs.append(f"usage: {ref_usage} != {got_usage}")
     for qid in ref["answers"]:
         a, b = dict(ref["answers"][qid]), dict(got["answers"][qid])
         ax, bx = a.pop("action", None), b.pop("action", None)

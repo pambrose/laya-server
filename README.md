@@ -103,6 +103,14 @@ TYPESAFE_BASE_URL=http://localhost:8000 make live-tests
 checkpoint by language detection. As an extension, Laya's own names — `english`,
 `multilingual`, `typed-decisions` — force a specific one.
 
+When detection cannot identify the language — a few words, or only content words such as
+"Quero cancelar" — the request goes to `LAYA_SERVER_DEFAULT_CHECKPOINT`, `english` unless set.
+Laya itself switched that fallback to `multilingual` in 0.4.0, reporting it better on 50 of 51
+languages but worse on English (0.71 against 0.82); its break-even is roughly 62% English
+traffic. This server keeps `english` so that upgrading Laya changes no routing on its own. Set
+it to `multilingual` for mostly non-English traffic, and preload that checkpoint too, or the
+first undecided request pays for loading it.
+
 The response echoes the `model` you asked for. The checkpoint that actually served the request
 is reported in the `X-Laya-Checkpoint` response header, so the JSON body contains nothing Jev
 would not send.
@@ -156,8 +164,9 @@ curl -s localhost:8000/ready | jq
 `devices` reports one entry per resident checkpoint and `device` summarises them, or is
 `"mixed"` when they disagree. Both are read from the loaded checkpoints rather than from
 configuration, so they show what Laya actually settled on: it downgrades an unavailable `cuda` or
-`mps` to `cpu` with only a print to stdout, and it can move a single checkpoint to `cpu`
-mid-request after an OOM. The per-checkpoint view is what makes that visible.
+`mps` to `cpu` with only a `RuntimeWarning` on stderr. An out-of-memory error mid-request moves
+that one request to `cpu` and restores the device afterwards, so it shows here only if the
+restore fails. The per-checkpoint view is what makes a downgrade visible.
 
 Neither route requires an API key, since orchestrators probe without credentials, and neither
 takes an inference lock, so a server busy on a forward pass still answers. When
@@ -182,6 +191,7 @@ Neither route is part of Jev's API, so a drop-in client never sees them. The con
 | `LAYA_SERVER_API_KEY`   | unset     | When set, requests need `Authorization: Bearer <key>`; a missing or wrong key gets Jev's 401. When unset, auth is skipped entirely. |
 | `LAYA_SERVER_DEVICE`    | auto      | `cuda`, `mps`, or `cpu`. Laya auto-detects when unset.                                                                              |
 | `LAYA_SERVER_PRELOAD`   | all three | Comma-separated checkpoints to load at startup.                                                                                     |
+| `LAYA_SERVER_DEFAULT_CHECKPOINT` | `english` | Where a `jev-*` request goes when language detection cannot identify the state's language (short or content-word-only text). |
 | `LAYA_SERVER_MAX_QUEUE` | 32        | In-flight requests **per checkpoint** before that checkpoint answers 529.                                                           |
 | `LAYA_SERVER_MAX_BODY_BYTES` | 1000000 | Request bodies larger than this are rejected with a 422 before being parsed.                                                   |
 | `LAYA_SERVER_LOG_LEVEL` | `INFO`    | Logger verbosity.                                                                                                                   |
@@ -193,13 +203,15 @@ These are inherent to Laya, and are documented rather than hidden.
 
 - **Context window.** Jev accepts 32k tokens of state; these checkpoints accept 512 (english) or
   1024 (multilingual), and the room left for state shrinks with the size of the question. Laya
-  silently truncates oversized input, which would hand you an answer computed on partial data, so
+  truncates oversized input and answers anyway, noting it only in `usage` fields Jev's response
+  does not have. That would hand you an answer computed on partial data with no sign of it, so
   this server rejects it with a `422` naming the actual and available token counts instead.
 - **`usage.input_tokens`.** Laya sums its attention mask across every question row, so the state
   is counted once per question. Jev counts state plus questions combined. The number is passed
   through unchanged but is not comparable to Jev's.
 - **Option text.** Laya hard-truncates each choice option to 48 tokens, and truncates further
-  when many options crowd the question header. This happens silently inside the library.
+  when many options crowd the question header. Laya reports only the second, in a `usage` field
+  Jev does not have, so neither is visible in the response.
 - **Answer quality.** Laya's checkpoints are not Jev. The typed contract guarantees the shape of
   the answer, not that it matches what Jev would have said. Spot-check accuracy on your own data
   before treating this as a substitute.

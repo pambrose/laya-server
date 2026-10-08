@@ -12,8 +12,15 @@ class FakeTokenizer:
     pad_token_id = 0
     mask_token = "[MASK]"
 
-    def __call__(self, text, add_special_tokens=False):
-        return {"input_ids": [4] * len(str(text).split())}
+    def __call__(
+        self, text, add_special_tokens=False, truncation=False, max_length=None
+    ):
+        # laya 0.4 encodes each option with truncation=True, max_length=48
+        # (common.py:244-250); honoring it keeps option-heavy budgets faithful.
+        ids = [4] * len(str(text).split())
+        if truncation and max_length is not None:
+            ids = ids[:max_length]
+        return {"input_ids": ids}
 
 
 class FakeAgent:
@@ -30,11 +37,23 @@ def agent():
     return FakeAgent()
 
 
+# Shaped like laya 0.4.1's output (agent.py:1396-1405, 1541-1572), including
+# the keys Jev does not have, so a test sees them leak if translation regresses.
 LAYA_NOUL_ANSWER = {
     "type": "noul",
     "noul": 0.91,
     "confidence": 0.91,
+    "answer_confidence": 0.91,
     "action": {"act_probability": 0.2},
+}
+
+LAYA_USAGE = {
+    "input_tokens": 42,
+    "output_tokens": 0,
+    "state_tokens": 9,
+    "state_tokens_dropped": 0,
+    "truncated": False,
+    "truncated_questions": [],
 }
 
 
@@ -53,7 +72,7 @@ class FakeInferenceAgent(FakeAgent):
         return {
             "model": "laya-rl-agent",
             "answers": {qid: dict(LAYA_NOUL_ANSWER) for qid in questions},
-            "usage": {"input_tokens": 42, "output_tokens": 0},
+            "usage": dict(LAYA_USAGE),
         }
 
 
