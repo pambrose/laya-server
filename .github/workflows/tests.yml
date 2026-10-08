@@ -14,16 +14,23 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Read-only: nothing here writes to the repository, issues or packages.
+permissions:
+  contents: read
+
 jobs:
   lint:
     name: lint and types
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Nothing pushes, so the token need not outlive the checkout step.
+          persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v10.2.0
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: true
           cache-dependency-glob: uv.lock
@@ -41,6 +48,13 @@ jobs:
       - name: Mypy
         run: uv run mypy
 
+      # Security audit of these workflows and dependabot.yml. The token turns on
+      # zizmor's online audits (impostor commits, known-vulnerable actions).
+      - name: Zizmor
+        run: uv run zizmor .github/
+        env:
+          GH_TOKEN: ${{ github.token }}
+
   fast:
     name: tests (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
@@ -51,19 +65,28 @@ jobs:
         # Every version pyproject's requires-python claims to support.
         python-version: ["3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Nothing pushes, so the token need not outlive the checkout step.
+          persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v10.2.0
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: true
           cache-dependency-glob: uv.lock
 
+      # Through env rather than `${{ }}` in the script, so no expression is
+      # ever expanded into shell source.
       - name: Install dependencies
-        run: uv sync --locked --python ${{ matrix.python-version }}
+        run: uv sync --locked --python "$PYTHON_VERSION"
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
 
       - name: Run tests
-        run: uv run --python ${{ matrix.python-version }} pytest -m "not slow"
+        run: uv run --python "$PYTHON_VERSION" pytest -m "not slow"
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
 
   integration:
     name: integration (real checkpoint)
@@ -73,16 +96,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Nothing pushes, so the token need not outlive the checkout step.
+          persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v10.2.0
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: true
           cache-dependency-glob: uv.lock
 
       - name: Cache Laya checkpoints
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/huggingface
           key: huggingface-${{ runner.os }}-english

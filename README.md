@@ -300,6 +300,7 @@ make test-slow   # loads a real checkpoint
 make test-all    # everything
 make lint        # ruff check + format check, no changes written
 make typecheck   # mypy, strict, over src/
+make zizmor      # security audit of the GitHub Actions workflows
 make format      # apply autofixes and reformat
 make ci          # exactly what CI runs on a pull request
 make smoke       # POST a sample request to a running server
@@ -315,9 +316,14 @@ pull request. The checkpoint-backed suite downloads model weights, so it is not 
 runs weekly on a schedule and on demand via *Run workflow* (`workflow_dispatch`), with the
 HuggingFace cache preserved between runs.
 
-CI installs with `uv sync --locked`, so a stale `uv.lock` fails the build. It runs ruff and mypy
-in one job, then the test suite against **Python 3.12 and 3.13** — every version
-`requires-python` claims to support. `make ci` reproduces all of it locally.
+CI installs with `uv sync --locked`, so a stale `uv.lock` fails the build. It runs ruff, mypy and
+[zizmor](https://docs.zizmor.sh) in one job, then the test suite against **Python 3.12 and 3.13** —
+every version `requires-python` claims to support. `make ci` reproduces all of it locally.
+
+zizmor audits the workflows and `dependabot.yml` themselves, so CI holds to what it checks for:
+actions pinned to commit SHAs, a read-only token, and checkouts that do not persist credentials.
+CI gives it a token, which adds the online audits (impostor commits, known-vulnerable actions);
+locally `make zizmor` runs only the offline ones unless `GH_TOKEN` is set.
 
 If you enable branch protection, the required status checks are **`lint and types`**,
 **`tests (py3.12)`** and **`tests (py3.13)`**. GitHub matches required checks by display name, so
@@ -325,7 +331,9 @@ a rule naming a job that no longer exists (such as the old `fast suite`) would n
 would leave pull requests pending forever.
 
 [Dependabot](.github/dependabot.yml) watches Python dependencies, GitHub Actions and the
-Dockerfile base images weekly.
+Dockerfile base images weekly. It waits 7 days after a release before proposing it, so a bad or
+compromised release has time to be noticed and yanked first, and it updates SHA-pinned actions
+together with their version comments.
 
 Linting covers `src/`, `tests/` and `scripts/`.
 

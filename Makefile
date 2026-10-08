@@ -25,7 +25,7 @@ UVICORN := uv run uvicorn laya_server.app:app --host $(HOST) --port $(PORT)
 ENV := LAYA_SERVER_PRELOAD=$(PRELOAD)
 
 .DEFAULT_GOAL := help
-.PHONY: help install lock check-lock lint typecheck format toc test test-slow test-all \
+.PHONY: help install lock check-lock lint typecheck zizmor format toc test test-slow test-all \
         run dev smoke docker-build docker-run docker-login docker-buildx \
         docker-push build clean ci
 
@@ -49,6 +49,11 @@ lint: ## Check style, formatting, and that the README TOC is current
 
 typecheck: ## Type-check src/ with mypy (strict)
 	uv run mypy
+
+# With GH_TOKEN set (e.g. GH_TOKEN=$$(gh auth token) make zizmor) it also runs the
+# online audits CI runs; without one it runs only the offline audits.
+zizmor: ## Audit GitHub Actions workflows and dependabot.yml for security issues
+	uv run zizmor .github/
 
 format: ## Apply autofixes, reformat, and regenerate the README TOC
 	uv run ruff check --fix $(SOURCES)
@@ -116,4 +121,4 @@ clean: ## Remove build and test artifacts
 	find . -name __pycache__ -type d -not -path './.venv/*' -exec rm -rf {} +
 	find . -name '*.egg-info' -type d -not -path './.venv/*' -exec rm -rf {} +
 
-ci: check-lock lint typecheck test ## Run what CI runs on a pull request
+ci: check-lock lint typecheck zizmor test ## Run what CI runs on a pull request
