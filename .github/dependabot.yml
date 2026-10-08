@@ -8,17 +8,25 @@ updates:
     groups:
       # One PR for routine dev-tool bumps instead of one per tool.
       dev-tools:
-        patterns: ["ruff", "mypy", "pytest*"]
+        patterns: ["ruff", "mypy", "pytest*", "zizmor"]
     open-pull-requests-limit: 5
+    # Wait a week before proposing a release, so a bad or compromised one has
+    # time to be noticed and yanked first.
+    cooldown:
+      default-days: 7
 
   # Actions pinned in .github/workflows/.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
 
   # Base images in the Dockerfile.
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7

@@ -9,6 +9,43 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Nothing yet.
 
+## [0.2.0] - 2026-10-08
+
+### Changed
+
+- Upgraded laya from 0.3.4 to 0.4.1; the minimum is now `laya>=0.4.1`. Answers on english and
+  typed-decisions choice questions with 11 or more options are noticeably less confident, because
+  laya now clamps the checkpoints' `choice:11+` temperature from 0.1006 to 0.5. Questions with
+  fewer options score exactly as before on `cpu` and `cuda`. On `mps`, laya now runs requests with
+  five or more questions in fp16, so their probabilities can differ in the last digits.
+- Questions laya 0.4 refuses are now rejected with `422` before inference, with laya's message:
+  blank `instructions`, noul `criteria` keys other than `true`/`false` (matched
+  case-insensitively), null score levels, and list-form choice labels that are null, non-scalar or
+  duplicated.
+- Question fields other than `type`, `instructions` and `criteria` are ignored. laya 0.4 would
+  otherwise act on its own `labels` and `option_order` fields, which Jev does not have.
+- `LAYA_SERVER_PRELOAD` set to only commas or spaces now preloads all three checkpoints, as an
+  empty value already did.
+
+### Added
+
+- `LAYA_SERVER_DEFAULT_CHECKPOINT` (default `english`): where a `jev-*` request goes when language
+  detection cannot identify the state's language. laya 0.4 changed its own fallback to
+  `multilingual`; the server keeps `english`, so the upgrade does not reroute such requests.
+
+### Fixed
+
+- A list-form choice with an unhashable label (`[["a"], "b"]`) returned `500`; it is now a `422`.
+- Kept laya 0.4's new response fields off the wire: `answer_confidence` on every answer, and
+  `state_tokens`, `truncated` and related diagnostics in `usage`, which now carries only
+  `input_tokens` and `output_tokens`.
+- Score levels written as objects or arrays are echoed in `legend` as written, not as the JSON
+  text laya 0.4 renders them to.
+- The budget check now tokenizes under laya's tokenizer lock. laya 0.4 mutates the shared
+  tokenizer while encoding options, so an unlocked call could fail concurrent requests.
+- Language detection runs off the event loop. laya 0.4 scans every field of a structured state,
+  where 0.3.4 stopped after 4000 characters.
+
 ## [0.1.0] - 2026-09-20
 
 ### Added
@@ -57,5 +94,6 @@ See [the README](README.md#known-divergences-from-jev): a much smaller context w
 non-comparable `usage.input_tokens`, silent option-text truncation, and answers that come from
 Laya rather than Jev.
 
-[Unreleased]: https://github.com/pambrose/laya-server/compare/0.1.0...HEAD
+[Unreleased]: https://github.com/pambrose/laya-server/compare/0.2.0...HEAD
+[0.2.0]: https://github.com/pambrose/laya-server/compare/0.1.0...0.2.0
 [0.1.0]: https://github.com/pambrose/laya-server/releases/tag/0.1.0

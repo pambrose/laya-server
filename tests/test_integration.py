@@ -87,3 +87,35 @@ def test_answers_are_substantively_correct(live_client):
 def test_reports_the_serving_checkpoint(live_client):
     r = live_client.post("/v1/systemone", json=REQUEST)
     assert r.headers["X-Laya-Checkpoint"] == "english"
+
+
+def test_usage_carries_only_jevs_fields(live_client):
+    """Real laya 0.4 adds truncation and option diagnostics to usage."""
+    usage = live_client.post("/v1/systemone", json=REQUEST).json()["usage"]
+    assert set(usage) == {"input_tokens", "output_tokens"}
+
+
+def test_object_score_levels_are_echoed_as_objects(live_client):
+    """laya 0.4 renders each level to JSON text; Jev's legend admits objects."""
+    request = {
+        **REQUEST,
+        "questions": {
+            "urgency": {
+                "type": "score",
+                "instructions": "How urgent is this request?",
+                "criteria": [{"desc": "can wait"}, "critical deadline"],
+            }
+        },
+    }
+    legend = live_client.post("/v1/systemone", json=request).json()["answers"][
+        "urgency"
+    ]["legend"]
+    assert legend == {"0": {"desc": "can wait"}, "1": "critical deadline"}
+
+
+def test_undecided_language_falls_back_to_english(live_client):
+    """laya 0.4's own fallback is multilingual; the server pins english, so a
+    short state neither routes elsewhere nor loads a second checkpoint."""
+    r = live_client.post("/v1/systemone", json={**REQUEST, "state": "Cancel order"})
+    assert r.status_code == 200, r.text
+    assert r.headers["X-Laya-Checkpoint"] == "english"

@@ -156,7 +156,7 @@ class TestBackpressure:
 
 class TestRouterConstruction:
     def test_max_loaded_covers_all_checkpoints_with_subset_preload(self, monkeypatch):
-        """Laya evicts LRU when max_loaded is tight (router.py:188-195), and an
+        """Laya evicts LRU when max_loaded is tight (router.py:944-970), and an
         evicted checkpoint is rebuilt from scratch on its next request. Routing
         can reach any checkpoint regardless of what was preloaded, so the cache
         must be sized for all of them, not just the preloaded subset."""
@@ -167,7 +167,7 @@ class TestRouterConstruction:
         built = {}
 
         class RecordingRouter(FakeRouter):
-            def __init__(self, device=None, max_loaded=None):
+            def __init__(self, device=None, max_loaded=None, default=None):
                 super().__init__()
                 built["max_loaded"] = max_loaded
                 built["device"] = device
@@ -186,7 +186,7 @@ class TestRouterConstruction:
         routers = []
 
         class RecordingRouter(FakeRouter):
-            def __init__(self, device=None, max_loaded=None):
+            def __init__(self, device=None, max_loaded=None, default=None):
                 super().__init__()
                 routers.append(self)
 
@@ -195,6 +195,36 @@ class TestRouterConstruction:
         Engine.create(Settings.from_env({"LAYA_SERVER_PRELOAD": "english"}))
 
         assert routers[0].preloaded == ["english"]
+
+    @pytest.mark.parametrize(
+        ("env", "expected"),
+        [
+            ({}, "english"),
+            ({"LAYA_SERVER_DEFAULT_CHECKPOINT": "multilingual"}, "multilingual"),
+        ],
+    )
+    def test_routing_fallback_is_always_passed_explicitly(
+        self, monkeypatch, env, expected
+    ):
+        """laya 0.4.0 changed its own fallback from english to multilingual.
+        Relying on it would let a dependency bump reroute every request whose
+        language detection abstains, so the server always names one."""
+        import laya
+
+        from laya_server.config import Settings
+
+        built = {}
+
+        class RecordingRouter(FakeRouter):
+            def __init__(self, device=None, max_loaded=None, default=None):
+                super().__init__()
+                built["default"] = default
+
+        monkeypatch.setattr(laya, "Router", RecordingRouter)
+
+        Engine.create(Settings.from_env(env))
+
+        assert built["default"] == expected
 
 
 class TestLayaErrorsBecome422:
@@ -236,23 +266,57 @@ class TestLayaErrorsBecome422:
             predict(self._engine_raising(RuntimeError("CUDA out of memory")))
 
 
+class TestWhatReachesLaya:
+    def test_only_jev_question_fields_reach_routing_and_inference(self):
+        """laya 0.4 honors `labels` and `option_order`; Jev has neither."""
+        agent = FakeInferenceAgent()
+        router = FakeRouter(agents={"english": agent})
+        question = {
+            **NOUL,
+            "labels": {"false": "no", "true": "yes"},
+            "option_order": [1, 0],
+        }
+        predict(engine(router), questions={"refund": question})
+        _, sent = agent.calls[0]
+        assert sent == {"refund": NOUL}
+
+    def test_routing_runs_off_the_event_loop(self):
+        """Detection reads every leaf of a structured state in laya 0.4
+        (lang.py:808-860), so a large one would stall the loop and the probes."""
+        import threading
+
+        threads = {}
+
+        class ThreadRecordingRouter(FakeRouter):
+            def route(self, *args, **kwargs):
+                threads["route"] = threading.get_ident()
+                return super().route(*args, **kwargs)
+
+        async def scenario():
+            threads["loop"] = threading.get_ident()
+            await engine(ThreadRecordingRouter()).predict(
+                "billed twice", QUESTIONS, requested_model="jev-latest"
+            )
+
+        asyncio.run(scenario())
+        assert threads["route"] != threads["loop"]
+
+
 class TestStateSerializedOnce:
     """Issue 8: the state was JSON-serialized in validation and again by laya,
-    once per question."""
+    once per question. laya 0.4 serializes it once per call itself
+    (agent.py:1149-1153), so the server's pre-serialization was removed."""
 
-    def test_inference_receives_the_already_serialized_state(self):
+    def test_inference_receives_the_state_as_sent(self):
         agent = FakeInferenceAgent()
         router = FakeRouter(agents={"english": agent})
         predict(engine(router), state={"body": "billed twice"})
         sent_state, _ = agent.calls[0]
-        assert isinstance(sent_state, str), (
-            "laya would re-serialize a dict per question"
-        )
-        assert "billed twice" in sent_state
+        assert sent_state == {"body": "billed twice"}
 
     def test_routing_still_sees_the_original_structure(self):
         """Language detection walks dict/list leaves and ignores keys
-        (lang.py:67-88), so it must not be handed the JSON text."""
+        (lang.py:808-860), so it must not be handed the JSON text."""
         router = FakeRouter()
         predict(engine(router), state={"body": "billed twice"})
         assert router.route_calls[0]["state"] == {"body": "billed twice"}

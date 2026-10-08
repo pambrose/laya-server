@@ -11,12 +11,16 @@ class TestDefaults:
 
     def test_preloads_all_three_checkpoints(self):
         """max_loaded must cover every preloaded checkpoint so Router never
-        evicts mid-request (router.py:188-195 is not concurrency-safe)."""
+        evicts and rebuilds one (router.py:944-970)."""
         s = Settings.from_env({})
         assert set(s.preload) == {"english", "multilingual", "typed-decisions"}
 
     def test_device_defaults_to_laya_autodetect(self):
         assert Settings.from_env({}).device is None
+
+    def test_routing_fallback_defaults_to_english(self):
+        """Not laya's own default, which became multilingual in laya 0.4.0."""
+        assert Settings.from_env({}).default_checkpoint == "english"
 
 
 class TestEnvOverrides:
@@ -32,9 +36,19 @@ class TestEnvOverrides:
         s = Settings.from_env({"LAYA_SERVER_PRELOAD": "english,multilingual"})
         assert s.preload == ("english", "multilingual")
 
+    @pytest.mark.parametrize("value", ["", ",", " , "])
+    def test_preload_with_no_names_loads_everything(self, value):
+        """laya 0.4 reads preload([]) as "load nothing" (0.3.4 loaded all)."""
+        s = Settings.from_env({"LAYA_SERVER_PRELOAD": value})
+        assert set(s.preload) == {"english", "multilingual", "typed-decisions"}
+
     def test_preload_entries_are_trimmed(self):
         s = Settings.from_env({"LAYA_SERVER_PRELOAD": " english , multilingual "})
         assert s.preload == ("english", "multilingual")
+
+    def test_routing_fallback_override(self):
+        s = Settings.from_env({"LAYA_SERVER_DEFAULT_CHECKPOINT": " multilingual "})
+        assert s.default_checkpoint == "multilingual"
 
     def test_max_queue_depth_override(self):
         assert Settings.from_env({"LAYA_SERVER_MAX_QUEUE": "7"}).max_queue_depth == 7

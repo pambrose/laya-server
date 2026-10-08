@@ -1,7 +1,7 @@
 import pytest
 
 from laya_server.errors import ValidationFailed
-from laya_server.validation import validate_questions
+from laya_server.validation import jev_question, validate_questions
 
 
 def expect_rejected(questions) -> str:
@@ -11,50 +11,46 @@ def expect_rejected(questions) -> str:
 
 
 class TestLayaCrashModes:
-    """Each case crashes raw Laya with an untyped error; all must become 422s.
-
-    References are to the installed laya 0.3.4 source.
-    """
-
-    def test_empty_questions_rejected(self):
-        # collate_items returns None -> TypeError at agent.py:271
-        assert "at least one question" in expect_rejected({})
+    """Each case crashed laya 0.3.4 with an untyped error (a client-triggerable
+    500); all must be 422s raised before inference. laya 0.4 now refuses each
+    one itself with a ValueError, at the agent.py lines cited."""
 
     def test_missing_type_rejected(self):
-        # KeyError: 'type' at agent.py:231
+        # agent.py:984-986
         assert "type" in expect_rejected({"q": {"instructions": "Is it urgent?"}})
 
     def test_unknown_type_rejected(self):
-        # falls through render_options, dies at KeyError: 'bool' agent.py:264
+        # agent.py:984-986
         msg = expect_rejected({"q": {"type": "bool", "instructions": "Urgent?"}})
         assert "bool" in msg
 
     def test_missing_instructions_rejected(self):
-        # KeyError: 'instructions' at agent.py:235
+        # agent.py:987-988
         assert "instructions" in expect_rejected({"q": {"type": "noul"}})
 
     def test_choice_with_null_criteria_rejected(self):
-        # AttributeError: 'NoneType' has no attribute 'items' at common.py:38
+        # agent.py:1001-1003
         msg = expect_rejected(
             {"q": {"type": "choice", "instructions": "Which?", "criteria": None}}
         )
         assert "criteria" in msg
 
     def test_choice_with_empty_criteria_rejected(self):
-        # k=0 reaches numpy -> ValueError: zero-size array at agent.py:307
+        # agent.py:1004-1005
         msg = expect_rejected(
             {"q": {"type": "choice", "instructions": "Which?", "criteria": {}}}
         )
         assert "criteria" in msg
 
     def test_score_with_empty_criteria_rejected(self):
+        # agent.py:1065-1066
         msg = expect_rejected(
             {"q": {"type": "score", "instructions": "How bad?", "criteria": []}}
         )
         assert "criteria" in msg
 
     def test_noul_with_list_criteria_rejected(self):
-        # AttributeError at common.py:42 (crit.get on a list)
+        # agent.py:1070-1072
         msg = expect_rejected(
             {
                 "q": {
@@ -67,7 +63,50 @@ class TestLayaCrashModes:
         assert "criteria" in msg
 
 
+class TestLayasOwnRules:
+    """Rules laya 0.4 added in `Agent._check_question`. The server runs that
+    check during validation, so these are 422s before any tokenizing."""
+
+    def test_blank_instructions_rejected(self):
+        msg = expect_rejected({"q": {"type": "noul", "instructions": "   "}})
+        assert "'q'" in msg
+
+    def test_noul_criteria_keys_other_than_true_false_rejected(self):
+        msg = expect_rejected(
+            {
+                "q": {
+                    "type": "noul",
+                    "instructions": "Urgent?",
+                    "criteria": {"true": "yes", "maybe": "unsure"},
+                }
+            }
+        )
+        assert "maybe" in msg
+
+    def test_duplicate_list_labels_rejected(self):
+        expect_rejected(
+            {"q": {"type": "choice", "instructions": "Which?", "criteria": ["a", "a"]}}
+        )
+
+    def test_unhashable_list_label_rejected_not_500(self):
+        """Issue 20: this escaped as a TypeError from the budget check's
+        dict comprehension, i.e. a 500."""
+        expect_rejected(
+            {
+                "q": {
+                    "type": "choice",
+                    "instructions": "Which?",
+                    "criteria": [["a"], "b"],
+                }
+            }
+        )
+
+
 class TestJevDocumentedLimits:
+    def test_empty_questions_rejected(self):
+        """Jev requires a question; laya 0.4 would answer with nothing."""
+        assert "at least one question" in expect_rejected({})
+
     def test_choice_over_255_options_rejected(self):
         criteria = {f"opt{i}": f"option {i}" for i in range(256)}
         msg = expect_rejected(
@@ -109,7 +148,7 @@ class TestValidRequests:
         )
 
     def test_choice_with_null_valued_options_is_valid(self):
-        """Laya supports bare labels: {"code": None} (common.py:38)."""
+        """Laya supports bare labels: {"code": None} (common.py:141)."""
         validate_questions(
             {
                 "q": {
@@ -121,7 +160,7 @@ class TestValidRequests:
         )
 
     def test_choice_with_list_criteria_is_valid(self):
-        """Coerced to {c: None} at agent.py:233-234."""
+        """Coerced to {c: None} at agent.py:1112-1113."""
         validate_questions(
             {"q": {"type": "choice", "instructions": "Which?", "criteria": ["a", "b"]}}
         )
@@ -132,6 +171,48 @@ class TestValidRequests:
                 "q": {
                     "type": "noul",
                     "instructions": {"ask": "Urgent?", "note": "consider deadlines"},
+                }
+            }
+        )
+
+    def test_noul_criteria_keys_are_case_insensitive(self):
+        """laya lowercases them (agent.py:1114-1116)."""
+        validate_questions(
+            {
+                "q": {
+                    "type": "noul",
+                    "instructions": "Phishing?",
+                    "criteria": {"TRUE": "it is", "False": "it is not"},
+                }
+            }
+        )
+
+
+class TestOnlyJevFieldsReachLaya:
+    """laya 0.4 honors `labels` (noul) and `option_order`, which change what
+    the model is shown. Jev has neither, so they are ignored like any other
+    unknown field rather than exposing behavior Jev lacks."""
+
+    def test_laya_only_fields_are_dropped(self):
+        question = {
+            "type": "noul",
+            "instructions": "Urgent?",
+            "labels": {"false": "calm", "true": "urgent"},
+            "option_order": [1, 0],
+        }
+        assert jev_question(question) == {"type": "noul", "instructions": "Urgent?"}
+
+    def test_malformed_laya_only_fields_are_not_validated(self):
+        """Ignored means ignored: laya would reject these labels, but they
+        never reach it."""
+        validate_questions(
+            {
+                "q": {
+                    "type": "choice",
+                    "instructions": "Which?",
+                    "criteria": ["a", "b"],
+                    "labels": "nonsense",
+                    "option_order": [7],
                 }
             }
         )

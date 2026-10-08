@@ -54,6 +54,50 @@ def parsed():
     return SystemOneResponse.model_validate_json(json.dumps(body))
 
 
+# The same shape as laya 0.4.1 returns it: `answer_confidence` on every answer,
+# truncation diagnostics in usage, and a score level written as an object,
+# which laya renders to JSON text.
+LAYA_04_RESULT = {
+    "model": "laya-rl-agent",
+    "answers": {
+        "urgency": {
+            "type": "score",
+            "score": 0.8,
+            "legend": {"0": '{"desc": "calm"}', "1": "urgent"},
+            "probabilities": {"0": 0.2, "1": 0.8},
+            "confidence": 0.28,
+            "answer_confidence": 0.8,
+            "action": {"act_probability": 0.42},
+        },
+    },
+    "usage": {
+        "input_tokens": 150,
+        "output_tokens": 0,
+        "state_tokens": 60,
+        "state_tokens_dropped": 0,
+        "truncated": False,
+        "truncated_questions": [],
+    },
+}
+LAYA_04_QUESTIONS = {
+    "urgency": {
+        "type": "score",
+        "instructions": "How urgent?",
+        "criteria": [{"desc": "calm"}, "urgent"],
+    }
+}
+
+
+class TestSdkParsesLaya04Response:
+    def test_object_level_round_trips_as_an_object(self):
+        body = to_jev_response(
+            LAYA_04_RESULT, requested_model="jev-latest", questions=LAYA_04_QUESTIONS
+        )
+        parsed = SystemOneResponse.model_validate_json(json.dumps(body))
+        assert parsed.scores["urgency"].legend == {0: {"desc": "calm"}, 1: "urgent"}
+        assert parsed.usage.input_tokens == 150
+
+
 class TestSdkParsesOurResponse:
     def test_choice_answer_round_trips(self):
         answer = parsed().choices["dept"]
@@ -61,8 +105,9 @@ class TestSdkParsesOurResponse:
         assert answer.probabilities["billing"] == 0.9842
 
     def test_score_legend_parses_as_an_integer_keyed_map(self):
-        """The SDK types legend as dict[int, str]; api.md agrees, while the
-        example in primitives.md shows an array. The SDK is authoritative."""
+        """The SDK keys legend by int (values str | dict | list); api.md
+        agrees, while the example in primitives.md shows an array. The SDK is
+        authoritative."""
         assert parsed().scores["urgency"].legend == {
             0: "not urgent",
             1: "soon",
