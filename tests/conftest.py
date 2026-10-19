@@ -112,7 +112,7 @@ class LoadedFakeRouter(FakeRouter):
     """FakeRouter that reports resident checkpoints, as `laya.Router` does.
 
     `loaded` mirrors laya's `_order` list and `load()` reorders it through the
-    same `_touch` semantics (router.py:169-185). The earlier version returned a
+    same `_touch` semantics (router.py:1001-1005). The earlier version returned a
     fixed list, which made it more forgiving than the real Router and hid a bug
     where a read-only probe reordered what the next probe reported.
     """

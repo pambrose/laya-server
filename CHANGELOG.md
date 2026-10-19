@@ -7,7 +7,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+
+- Upgraded laya from 0.4.1 to 0.4.3; the minimum stays `laya>=0.4.1`. Answers are unchanged: the
+  modules that load checkpoints and run inference (`agent.py`, `common.py`, `presets.py`) are
+  identical between the two releases. `GET /v1/models` now reports a `release_date` of
+  `2026-10-11`.
 
 ## [0.2.0] - 2026-10-08
 

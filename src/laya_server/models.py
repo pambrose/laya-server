@@ -21,6 +21,7 @@ from .engine import JEV_MODELS, LAYA_MODELS
 LAYA_RELEASE_DATES: dict[str, str] = {
     "0.3.4": "2026-09-20",
     "0.4.1": "2026-10-08",
+    "0.4.3": "2026-10-11",
 }
 
 
