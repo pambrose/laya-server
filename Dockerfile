@@ -32,7 +32,7 @@ COPY src ./src
 RUN --mount=type=cache,target=/root/.cache/uv uv pip install --no-deps .
 
 # -------------------------------------------------------------- runtime stage
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 RUN useradd --create-home --uid 10001 app
 
