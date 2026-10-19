@@ -11,7 +11,7 @@ class TestDefaults:
 
     def test_preloads_all_three_checkpoints(self):
         """max_loaded must cover every preloaded checkpoint so Router never
-        evicts and rebuilds one (router.py:944-970)."""
+        evicts and rebuilds one (router.py:1007-1033)."""
         s = Settings.from_env({})
         assert set(s.preload) == {"english", "multilingual", "typed-decisions"}
 

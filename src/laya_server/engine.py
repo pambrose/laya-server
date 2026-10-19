@@ -1,7 +1,7 @@
 """Owns the Laya Router and decides how requests share it.
 
 Laya 0.3.4 had no locking at all, and this module existed to make it safe.
-Laya 0.4 locks the Router's lifecycle itself (router.py:713-727, 851-970) and
+Laya 0.4 locks the Router's lifecycle itself (router.py:759-773, 914-1033) and
 makes inference on one Agent re-entrant (agent.py:166-211; common.py:41-91),
 so what remains here is policy rather than protection:
 
@@ -75,7 +75,7 @@ class Engine:
 
         # Sized for every checkpoint, not just the preloaded ones: routing can
         # reach any of them, and a tight max_loaded would evict a resident
-        # checkpoint to make room (router.py:944-970), rebuilding it from
+        # checkpoint to make room (router.py:1007-1033), rebuilding it from
         # scratch on its next request.
         router = laya.Router(
             device=settings.device,
@@ -97,8 +97,8 @@ class Engine:
         value would hide that.
         """
         # Sorted, and read without Router.load(): load() calls _touch(), which
-        # reorders the very list `loaded` reports (router.py:938-942,
-        # 1087-1090), so a probe would change what the next probe sees. Reading
+        # reorders the very list `loaded` reports (router.py:1001-1005,
+        # 1150-1153), so a probe would change what the next probe sees. Reading
         # the agent store directly is observation without mutation; Laya
         # offers no public accessor for it.
         loaded = sorted(self._router.loaded)
@@ -150,7 +150,7 @@ class Engine:
         # what the model is shown (see validation.JEV_QUESTION_FIELDS).
         questions = jev_questions(questions)
 
-        # Routing is pure and loads nothing (router.py:1112-1236), so it happens
+        # Routing is pure and loads nothing (router.py:1175-1299), so it happens
         # outside the lock: that is what lets different checkpoints run at once.
         # Offloaded because language detection now reads every leaf of a
         # structured state (lang.py:808-860) where 0.3.4 stopped at 4000 chars.

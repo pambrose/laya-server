@@ -156,7 +156,7 @@ class TestBackpressure:
 
 class TestRouterConstruction:
     def test_max_loaded_covers_all_checkpoints_with_subset_preload(self, monkeypatch):
-        """Laya evicts LRU when max_loaded is tight (router.py:944-970), and an
+        """Laya evicts LRU when max_loaded is tight (router.py:1007-1033), and an
         evicted checkpoint is rebuilt from scratch on its next request. Routing
         can reach any checkpoint regardless of what was preloaded, so the cache
         must be sized for all of them, not just the preloaded subset."""
