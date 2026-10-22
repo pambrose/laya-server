@@ -2,7 +2,7 @@
 
 Laya 0.3.4 validated nothing, so this module pre-empted each raw KeyError,
 AttributeError and numpy error it would raise. Laya 0.4 checks a
-question itself (`Agent._check_question`, agent.py:967-1106) and raises a
+question itself (`Agent._check_question`, agent.py:963-1102) and raises a
 ValueError naming it. The server still checks first, for two reasons: Jev's
 documented limits (255 choice options, 2-10 score levels) reject what Laya
 accepts, and a 422 should name the problem in Jev's terms before any
@@ -70,7 +70,7 @@ def _validate_score(qid: str, criteria: Any) -> None:
 
 
 def _validate_noul(qid: str, criteria: Any) -> None:
-    # Optional, but when present it must be keyed "true"/"false" (agent.py:1070-1087).
+    # Optional, but when present it must be keyed "true"/"false" (agent.py:1066-1083).
     if criteria is not None and not isinstance(criteria, Mapping):
         _reject(qid, "'criteria' must be an object with 'true' and/or 'false' keys")
 
@@ -126,7 +126,7 @@ def validate_questions(questions: Any) -> None:
     if not isinstance(questions, Mapping):
         raise ValidationFailed("'questions' must be an object of question definitions")
     if not questions:
-        # Laya now answers this with an empty result (agent.py:1486-1491), but
+        # Laya now answers this with an empty result (agent.py:1482-1487), but
         # Jev requires at least one question.
         raise ValidationFailed("'questions' must contain at least one question")
     for qid, question in questions.items():
@@ -134,7 +134,7 @@ def validate_questions(questions: Any) -> None:
 
 
 def _to_internal(qdef: Mapping[str, Any]) -> dict[str, Any]:
-    """Laya's own conversion (agent.py:1108-1130): a pure staticmethod, so no
+    """Laya's own conversion (agent.py:1104-1126): a pure staticmethod, so no
     loaded model is touched. Mirroring it instead drifted on the first upgrade
     (noul key case, non-ASCII instructions)."""
     internal: dict[str, Any] = Agent._to_internal(dict(qdef))
@@ -159,7 +159,7 @@ def _validate_options_fit(agent: Any, qid: str, qdef: Mapping[str, Any]) -> None
     """Reject options Laya cannot place inside the sequence.
 
     Laya raises a ValueError when the option markers do not all survive
-    `max_len` (agent.py:1161-1177). Jev's documented 255-option ceiling is far
+    `max_len` (agent.py:1157-1173). Jev's documented 255-option ceiling is far
     looser, so a legal-looking request would otherwise fail only after it had
     queued for inference. The check mirrors Laya's own by building the
     sequence and comparing marker count; `state_room` cannot stand in here
@@ -192,7 +192,7 @@ def validate_budget(
     partial input with no sign of it. Jev allows 32k tokens of state; these
     checkpoints allow 512-1024, so the difference is reported explicitly.
     """
-    # Counted exactly as Laya encodes the state (agent.py:1149-1153), and
+    # Counted exactly as Laya encodes the state (agent.py:1145-1149), and
     # through its `encode_text`: Laya now enables truncation on the shared
     # tokenizer while encoding options, so an unlocked call here could race an
     # in-flight request's encode and fail with "Already borrowed".

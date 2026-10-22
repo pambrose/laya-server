@@ -37,7 +37,7 @@ def agent():
     return FakeAgent()
 
 
-# Shaped like laya 0.4.1's output (agent.py:1396-1405, 1541-1572), including
+# Shaped like laya 0.4.1's output (agent.py:1392-1401, 1537-1568), including
 # the keys Jev does not have, so a test sees them leak if translation regresses.
 LAYA_NOUL_ANSWER = {
     "type": "noul",

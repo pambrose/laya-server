@@ -16,14 +16,14 @@ _JEV_ANSWER_KEYS = {
 }
 
 # Jev's `Usage` has exactly these. Laya 0.4 adds `state_tokens`, `truncated`,
-# `options` and more (agent.py:1541-1566).
+# `options` and more (agent.py:1537-1562).
 _JEV_USAGE_KEYS = ("input_tokens", "output_tokens")
 
 
 def _jev_legend(laya_legend: dict[str, Any], criteria: Any) -> dict[str, Any]:
     """Each score level as the caller wrote it, where Jev's type allows it.
 
-    Laya renders every level to text (agent.py:1384-1390), so a level written
+    Laya renders every level to text (agent.py:1380-1386), so a level written
     as an object comes back as a JSON string. Jev's legend admits objects and
     arrays (typesafe_sdk response_types.py:55), so those are echoed verbatim.
     Anything else keeps Laya's text, which is also what lets a numeric level
