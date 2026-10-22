@@ -8,9 +8,9 @@ that exported all three to ONNX and checked them against Laya's own output.
 payload exactly, so any language with an ONNX Runtime binding can serve Laya in-process. ONNX
 Runtime on CPU also turned out to be about twice as fast as PyTorch.
 
-The spike ran against laya 0.3.4. Under laya 0.4.1 the `english` export and its payload parity
+The spike ran against laya 0.3.4. Under laya 0.4.7 all three exports and their payload parity
 were re-run and still match exactly (see [Spike results](#spike-results)); line references below
-are to 0.4.1. laya now also ships its own ONNX runtime (`ONNXAgent`, `laya.load(backend="onnx")`,
+are to 0.4.7. laya now also ships its own ONNX runtime (`ONNXAgent`, `laya.load(backend="onnx")`,
 `onnx_agent.py`) using the same five inputs and two outputs.
 
 ## What the model actually is
@@ -76,17 +76,17 @@ likeliest place for a silent divergence and it turned out fine.
    `head_max_len` clamp via `max(8, opt_budget)`, the `.replace(mask_tok, " ")` stripping on
    every text field, left vs right state truncation (a list state keeps its newest turns), and
    the final `ids[:max_len]` plus `markers < max_len` filter. Upstream of it, `_to_internal`
-   (`agent.py:1108-1130`) renders structured instructions with `json.dumps(..., ensure_ascii=False)`,
+   (`agent.py:1104-1126`) renders structured instructions with `json.dumps(..., ensure_ascii=False)`,
    lowercases noul criteria keys, and `render_options` stringifies choice labels.
 2. **The forward pass.** The easy one — this is what the ONNX graph carries.
-3. **Postprocess** (`agent.py:1331-1407`). Per-bucket temperature (clamped, see below), stable
+3. **Postprocess** (`agent.py:1327-1403`). Per-bucket temperature (clamped, see below), stable
    softmax, entropy confidence `1 - H(p)/log(k)`, expected value for `score`, `p[1]` for `noul`,
    and since 0.4 an `answer_confidence` of `max(p)` on every answer. Score `legend` values are
    rendered with `render_criterion`, so an object level comes back as JSON text. About 50 lines
    of arithmetic.
 
 For `Router` parity, add `lang.py` (865 lines of dependency-free script and language detection)
-and `router.py:1112 route()`. A server can skip both by passing `model=` explicitly.
+and `router.py:1175 route()`. A server can skip both by passing `model=` explicitly.
 
 ### Temperature is not optional
 
@@ -100,7 +100,7 @@ is actually divided by 1.7602, not ~1.01. `multilingual` ships an empty table an
 temperatures, so it applies no scaling at all. A port that ignores `temperature_by_options`
 produces plausible-looking but wrong probabilities on two of the three checkpoints.
 
-Since 0.4, laya also **clamps** every temperature into `[0.5, 5.0]` at load (`common.py:824-843`;
+Since 0.4, laya also **clamps** every temperature into `[0.5, 5.0]` at load (`common.py:835-854`;
 non-numbers, NaN and inf become 1.0) and warns when it does. The shipped `choice:11+` entry is
 0.1006, so an 11-option choice on `english` or `typed-decisions` is divided by 0.5, not by the
 value in the config file. A port must clamp too: reading the raw config reproduces 0.3.4's much
@@ -156,8 +156,11 @@ onnxruntime 1.30.0, onnxscript 0.7.2, against laya 0.3.4. CPU execution provider
 
 Re-run for `english` against laya 0.4.1 (onnx 1.23.1, otherwise identical): logit diff 1.6e-05,
 prob diff 2.3e-06, payload parity 6/6 exact, after porting the postprocess changes above. The
-pre-0.4 `verify_parity.py` fails all six cases against 0.4.1. `typed-decisions` and
-`multilingual` have not been re-run.
+pre-0.4 `verify_parity.py` fails all six cases against 0.4.1.
+
+Re-run for all three checkpoints against laya 0.4.7 (onnx 1.23.2, onnxruntime 1.31.0, otherwise
+identical): every size and difference in the table below reproduces to the digits shown, and
+payload parity is 6/6 exact on each. No postprocess change was needed.
 
 | Checkpoint | Export | ONNX size | max abs logit diff | max abs prob diff | Payload parity |
 | --- | --- | --- | --- | --- | --- |
@@ -207,7 +210,7 @@ Three traps, each of which fails in a way that looks like something else.
 
 One more, already handled upstream: ModernBERT's `torch.compile` decorators block
 `torch.onnx.export`, which is what Optimum's ModernBERT support had to work around. Laya
-already disables this at `agent.py:690` (`reference_compile = compile`, `False` by default) for
+already disables this at `agent.py:691` (`reference_compile = compile`, `False` by default) for
 unrelated latency reasons, so the prerequisite is satisfied by the library as shipped.
 
 ## Reproducing

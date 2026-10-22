@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to coding agents when working with code in this repository.
 
 ## What this is
 
@@ -41,8 +41,11 @@ CPU-only torch by exporting the locked versions, dropping the GPU-only packages
 the image at ~1.6GB instead of ~2.7GB; triton alone is 813MB of GPU kernel compiler.
 Both stages build `FROM base`, the file's only `python:` line, because the builder's venv links
 to that interpreter and is copied into the runtime. uv is copied in from its own image. Do not
-switch the builder to one of uv's `-python3.x` images: that is a second Python pin, and a bump
-that moved only one of them once produced an image that died on startup.
+switch the builder to one of uv's `-python3.x` images: that is a second Python pin, and a
+Dependabot PR that moved only one of them (PR #14) would have shipped an image that dies on startup.
+Dependabot is configured not to propose minor Python bumps for the image, because the image must
+run a version the CI matrix in `tests.yml` tests; the README's CI section lists what a manual bump
+moves.
 
 `make docker-push` publishes multi-arch to Docker Hub under `NAMESPACE` (default `pambrose`),
 tagged with the `pyproject.toml` version and `latest`. It confirms before pushing. Version
