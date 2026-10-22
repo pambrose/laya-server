@@ -31,7 +31,8 @@ updates:
     cooldown:
       default-days: 7
     ignore:
-      # The runtime image's Python must match the builder stage (its venv is
-      # copied across) and the CI matrix, so minor bumps are made by hand.
+      # Both Dockerfile stages share one python base, so a bump moves them
+      # together. The image's Python must still be one the CI matrix tests,
+      # so minor bumps are made by hand alongside the matrix.
       - dependency-name: "python"
         update-types: ["version-update:semver-minor"]
