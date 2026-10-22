@@ -8,7 +8,7 @@ FROM python:3.12-slim AS base
 # uv comes from its own image, which holds only the static binaries. A named
 # stage rather than an inline COPY --from keeps the tag on a FROM line, where
 # Dependabot looks for it.
-FROM ghcr.io/astral-sh/uv:0.9.30 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.5 AS uv
 
 # ---------------------------------------------------------------- build stage
 FROM base AS builder
