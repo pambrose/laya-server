@@ -39,6 +39,10 @@ CPU-only torch by exporting the locked versions, dropping the GPU-only packages
 (`nvidia-*`, `triton`, `cuda-*`) and installing with `uv pip install --torch-backend=cpu` —
 `uv sync` has no such flag and silently ignores `UV_TORCH_BACKEND`. That filter is what keeps
 the image at ~1.6GB instead of ~2.7GB; triton alone is 813MB of GPU kernel compiler.
+Both stages build `FROM base`, the file's only `python:` line, because the builder's venv links
+to that interpreter and is copied into the runtime. uv is copied in from its own image. Do not
+switch the builder to one of uv's `-python3.x` images: that is a second Python pin, and a bump
+that moved only one of them once produced an image that died on startup.
 
 `make docker-push` publishes multi-arch to Docker Hub under `NAMESPACE` (default `pambrose`),
 tagged with the `pyproject.toml` version and `latest`. It confirms before pushing. Version

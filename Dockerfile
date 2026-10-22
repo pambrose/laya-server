@@ -1,7 +1,19 @@
 # syntax=docker/dockerfile:1
 
+# The one Python pin. The builder's venv links to this interpreter and is copied
+# into the runtime, so both stages must run the same Python; building both from
+# this stage makes that structural rather than two tags kept in step by hand.
+FROM python:3.12-slim AS base
+
+# uv comes from its own image, which holds only the static binaries. A named
+# stage rather than an inline COPY --from keeps the tag on a FROM line, where
+# Dependabot looks for it.
+FROM ghcr.io/astral-sh/uv:0.9.30 AS uv
+
 # ---------------------------------------------------------------- build stage
-FROM ghcr.io/astral-sh/uv:0.9.30-python3.12-bookworm-slim AS builder
+FROM base AS builder
+
+COPY --from=uv /uv /usr/local/bin/uv
 
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
@@ -32,7 +44,7 @@ COPY src ./src
 RUN --mount=type=cache,target=/root/.cache/uv uv pip install --no-deps .
 
 # -------------------------------------------------------------- runtime stage
-FROM python:3.12-slim
+FROM base
 
 RUN useradd --create-home --uid 10001 app
 
