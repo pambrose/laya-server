@@ -99,6 +99,11 @@ TYPESAFE_BASE_URL=http://localhost:8000 make live-tests
 
 `POST /v1/systemone` — the request and response bodies are Jev's, unchanged.
 
+The request body may be sent zstd-compressed with `Content-Encoding: zstd`, which
+`typesafe-sdk` 0.7.5 and later does by default for bodies of 1024 bytes or more (on Python 3.14,
+or with the SDK's `zstd` extra). Any other encoding, a body that does not decompress, and a body
+that is not valid JSON are all rejected with a `422`.
+
 `model` accepts `jev-latest`, `jev-preview`, and `jev-1.13.0`, all of which let Laya pick a
 checkpoint by language detection. As an extension, Laya's own names — `english`,
 `multilingual`, `typed-decisions` — force a specific one.
@@ -193,7 +198,7 @@ Neither route is part of Jev's API, so a drop-in client never sees them. The con
 | `LAYA_SERVER_PRELOAD`   | all three | Comma-separated checkpoints to load at startup.                                                                                     |
 | `LAYA_SERVER_DEFAULT_CHECKPOINT` | `english` | Where a `jev-*` request goes when language detection cannot identify the state's language (short or content-word-only text). |
 | `LAYA_SERVER_MAX_QUEUE` | 32        | In-flight requests **per checkpoint** before that checkpoint answers 529.                                                           |
-| `LAYA_SERVER_MAX_BODY_BYTES` | 1000000 | Request bodies larger than this are rejected with a 422 before being parsed.                                                   |
+| `LAYA_SERVER_MAX_BODY_BYTES` | 1000000 | Request bodies larger than this, as sent or once decompressed, are rejected with a 422 before being parsed.                    |
 | `LAYA_SERVER_LOG_LEVEL` | `INFO`    | Logger verbosity.                                                                                                                   |
 
 ## Known divergences from Jev
@@ -221,7 +226,9 @@ These are inherent to Laya, and are documented rather than hidden.
 
 The response contract is checked two ways: `tests/test_sdk_compat.py` parses our output with
 TypeSafe's own `SystemOneResponse` model in the fast suite, and the server has been driven
-end-to-end by an unmodified `typesafe-sdk` client. Both agree that `legend` is an integer-keyed
+end-to-end by an unmodified `typesafe-sdk` client. The fast suite also sends requests through
+the real client in-process (`tests/test_request_body.py`), with and without the zstd compression
+it applies by default. Both agree that `legend` is an integer-keyed
 map — `api.md` documents it that way and the SDK types it `dict[int, str]`, though the example in
 `primitives.md` shows an array.
 
@@ -327,7 +334,7 @@ make ci          # exactly what CI runs on a pull request
 make smoke       # POST a sample request to a running server
 ```
 
-The fast suite stubs the Laya Router, so it runs in under a second and never touches the network.
+The fast suite stubs the Laya Router, so it runs in about two seconds and never touches the network.
 
 ## CI
 

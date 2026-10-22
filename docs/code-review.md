@@ -3,7 +3,7 @@
 Open issues found by reviewing `src/laya_server/`. Tick a box when the issue is fixed and update
 the **Status** line in its section. Numbers are stable — do not renumber when items are closed.
 
-_Last updated: 2026-10-21. 24 issues: 21 fixed, 3 open._
+_Last updated: 2026-10-21. 26 issues: 23 fixed, 3 open._
 _Line references in issues 1-19 are to laya 0.3.4; notes marked **laya 0.4.1** record what changed._
 _Issues 12-18 came from an independent review pass; each was re-verified before being recorded._
 
@@ -33,6 +33,8 @@ _Issues 12-18 came from an independent review pass; each was re-verified before 
 - [ ] **22.** CI never builds the Docker image, so a broken Dockerfile passes every check.
 - [ ] **23.** The release-date fallback picks the newest laya by comparing version strings.
 - [ ] **24.** The CI matrix omits Python 3.14, though `requires-python` admits it and the docs say it is covered.
+- [x] **25.** A zstd-compressed request body, which `typesafe-sdk` 0.7.5 sends by default, returns **HTTP 500**.
+- [x] **26.** A request body that is not valid JSON returns **HTTP 500** instead of 422.
 
 ---
 
@@ -385,6 +387,11 @@ image, but only at release time, so a Dockerfile change or a lockfile change tha
 CPU-only install is first caught there, or not at all if someone runs a bare `docker-push`.
 Issue 21's fix removes the failure that actually happened; this is the gap that let it pass.
 
+It has mattered twice since. PR #27 moved the uv build image four minor versions, from 0.9.30 to
+0.13.5, and passed CI without the image being built. The fix for issue 25 added a compiled
+dependency, `backports-zstd`, to the image. A local `make docker-build` and smoke test were the
+only checks on either.
+
 **Fix:** a job that runs `docker build` and probes `/ready` on pull requests that touch the
 `Dockerfile`, `uv.lock` or `pyproject.toml`.
 
@@ -413,3 +420,34 @@ otherwise.
 
 **Fix:** add 3.14 to the matrix, along with the README badge and the required checks, or cap
 `requires-python` below 3.14 until it is tested.
+
+## 25. zstd-compressed request bodies return 500
+
+**Severity:** high · **Status:** fixed — bodies are decoded per `Content-Encoding` · `body.py`,
+`app.py`
+
+`typesafe-sdk` 0.7.5 compresses request bodies of 1024 bytes or more with zstd by default, on
+Python 3.14 or with its `zstd` extra, and sends `Content-Encoding: zstd`. Starlette does not
+decode request bodies, so `request.json()` read the compressed bytes as text and raised
+`UnicodeDecodeError`, and the request returned 500. This broke the drop-in promise for every
+client on the SDK's default settings once a request reached 1KB. Found while reviewing the
+Dependabot bump to 0.7.5 (PR #26), but present for any client that sends the header.
+
+**Fix:** `body.decode_json_body` decompresses `zstd` and treats `identity` or no header as
+plain, and answers anything else with a 422. Decompression is capped at
+`LAYA_SERVER_MAX_BODY_BYTES` as it runs, so a small body cannot expand without bound, and
+truncated, corrupt or trailing data is a 422. Python 3.14 has zstd in the standard library; 3.12
+and 3.13 use `backports-zstd`, the package the SDK's own extra installs.
+`tests/test_request_body.py` covers it, including the real SDK client sending into the app.
+
+## 26. Malformed JSON returns 500
+
+**Severity:** medium · **Status:** fixed — parse errors are a 422 · `body.py`
+
+The handler caught pydantic's `ValidationError` around `request.json()` but not the parse
+itself, so a truncated body raised `JSONDecodeError`, a non-UTF-8 one `UnicodeDecodeError`, and
+deep nesting `RecursionError`, each a 500. A client-triggerable 500 is the same class of defect
+as issue 1.
+
+**Fix:** `decode_json_body` parses the body itself and turns `ValueError` and `RecursionError`
+into a 422 with the parser's message.

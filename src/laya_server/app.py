@@ -15,6 +15,7 @@ from fastapi import FastAPI, Header, Request
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
+from .body import decode_json_body
 from .config import Settings
 from .engine import Engine
 from .errors import JevError, Unauthorized, ValidationFailed
@@ -37,14 +38,15 @@ def _describe(exc: ValidationError) -> str:
     )
 
 
-async def _enforce_body_limit(request: Request, limit: int) -> None:
-    """Reject an oversized body before it is parsed or tokenized.
+async def _read_body(request: Request, limit: int) -> bytes:
+    """Read the body, rejecting an oversized one before it is parsed or tokenized.
 
     Validation tokenizes the state on the event loop before any lock is taken,
     so a large body stalls every other request -- including the health probes,
     which exist precisely so they never wait. Content-Length is checked first
     to avoid reading the body at all; the read size is then re-checked because
-    the header is client-supplied and may be absent or wrong.
+    the header is client-supplied and may be absent or wrong. This bounds the
+    body as sent; `decode_json_body` bounds it again once decompressed.
     """
     declared = request.headers.get("content-length")
     if declared is not None and declared.isdigit() and int(declared) > limit:
@@ -57,6 +59,7 @@ async def _enforce_body_limit(request: Request, limit: int) -> None:
         raise ValidationFailed(
             f"request body too large: {len(body)} bytes, limit is {limit}"
         )
+    return body
 
 
 def _check_auth(settings: Settings, authorization: str | None) -> None:
@@ -155,13 +158,15 @@ def create_app(
     ) -> JSONResponse:
         _check_auth(settings, authorization)
 
-        await _enforce_body_limit(request, settings.max_body_bytes)
+        body = await _read_body(request, settings.max_body_bytes)
 
-        # Validated here rather than as a body parameter so that an
+        # Decoded and validated here rather than as a body parameter so that an
         # unauthenticated caller gets 401 without learning whether its body
-        # was well-formed.
+        # was well-formed. Content-Encoding may arrive as several headers.
+        encoding = ", ".join(request.headers.getlist("content-encoding")) or None
+        data = decode_json_body(body, encoding, settings.max_body_bytes)
         try:
-            payload = SystemOneRequest.model_validate(await request.json())
+            payload = SystemOneRequest.model_validate(data)
         except ValidationError as exc:
             raise ValidationFailed(_describe(exc)) from exc
 

@@ -17,6 +17,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   documentation. The rest touch batch prediction, confidence gating and other options this server
   does not use. `GET /v1/models` now reports a `release_date` of `2026-10-14`.
 
+### Fixed
+
+- A zstd-compressed request body returned `500`. `typesafe-sdk` 0.7.5 and later compress bodies of
+  1024 bytes or more that way by default, on Python 3.14 or with the SDK's `zstd` extra. Bodies
+  sent with `Content-Encoding: zstd` are now decompressed, and `LAYA_SERVER_MAX_BODY_BYTES` also
+  bounds their decompressed size. Any other encoding is a `422`. On Python 3.12 and 3.13 this
+  adds a dependency on `backports-zstd`.
+- A request body that is not valid JSON, including one that is not UTF-8 or nests too deeply,
+  returned `500`. It is now a `422`.
+
 ## [0.2.0] - 2026-10-08
 
 ### Changed

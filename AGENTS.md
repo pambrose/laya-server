@@ -16,7 +16,7 @@ and the known divergences from Jev.
 ```bash
 make install
 make dev                        # first start downloads ~843MB per checkpoint
-make test                       # fast suite: stubs Laya, no network, <1s
+make test                       # fast suite: stubs Laya, no network, ~2s
 make test-slow                  # loads a real checkpoint (~20s)
 make lint                       # ruff check + format check
 make typecheck                  # mypy, strict, over src/
@@ -62,7 +62,7 @@ under that version. It does not create the git tag or GitHub release; do those a
 Request flow through `src/laya_server/`:
 
 ```
-app.py      auth -> schema validation -> engine -> Jev-shaped JSON + X-Laya-Checkpoint
+app.py      auth -> body limit -> decode (body.py) -> schema validation -> engine -> Jev JSON + header
 engine.py   validate questions -> resolve model -> keep Jev fields -> route -> validate budget -> lock -> threadpool
 translate.py  Laya answer dict -> Jev answer dict
 ```
@@ -93,6 +93,9 @@ tokenizer (truncation settings) while encoding.
 
 ## Conventions
 
+- A request the server cannot accept is a `ValidationFailed` (422), never a 500: Jev documents
+  only 401, 422, 429 and 529. `body.py` undoes `Content-Encoding` (zstd, as `typesafe-sdk` 0.7.5
+  sends by default) and parses the JSON, holding the decoded size to `LAYA_SERVER_MAX_BODY_BYTES`.
 - The response body must contain exactly `model`, `answers`, `usage` — nothing Jev would not send.
   Laya's extra `action` blocks and `answer_confidence`, its noul `confidence`, every `usage` key
   but `input_tokens`/`output_tokens`, and the `routing` key are stripped in `translate.py`, which
@@ -109,6 +112,9 @@ tokenizer (truncation settings) while encoding.
 - `TestClient` needs `httpx2`; with plain `httpx` starlette emits a deprecation that, under the
   rule above, fails the build. `httpx2` is therefore an explicit dev dependency rather than
   something inherited from `typesafe-sdk`.
+- To send requests through the real SDK client in a test, use `AsyncTypeSafeClient` over
+  `httpx2.ASGITransport(app=...)`, as `tests/test_request_body.py` does. The SDK passes a
+  per-request timeout, and `TestClient` rejects that with a deprecation warning.
 - Ruff's rule selection is pinned explicitly in `pyproject.toml` rather than inherited, because
   ruff's defaults shift between releases and CI must lint what a developer's machine does.
   Linting covers `src/`, `tests/` and `scripts/`.
