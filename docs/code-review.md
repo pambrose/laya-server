@@ -3,7 +3,7 @@
 Open issues found by reviewing `src/laya_server/`. Tick a box when the issue is fixed and update
 the **Status** line in its section. Numbers are stable — do not renumber when items are closed.
 
-_Last updated: 2026-10-08. 20 issues: 20 fixed, 0 open._
+_Last updated: 2026-10-21. 24 issues: 21 fixed, 3 open._
 _Line references in issues 1-19 are to laya 0.3.4; notes marked **laya 0.4.1** record what changed._
 _Issues 12-18 came from an independent review pass; each was re-verified before being recorded._
 
@@ -29,6 +29,10 @@ _Issues 12-18 came from an independent review pass; each was re-verified before 
 - [x] **18.** Model names are duplicated as literals in `models.py` rather than derived from `engine.py`.
 - [x] **19.** The backpressure tests hang intermittently, cancelling CI after 18 minutes.
 - [x] **20.** A list-form choice with an unhashable label returns **HTTP 500** instead of 422.
+- [x] **21.** The Dockerfile pins Python twice, so a bump that moves one stage breaks the image.
+- [ ] **22.** CI never builds the Docker image, so a broken Dockerfile passes every check.
+- [ ] **23.** The release-date fallback picks the newest laya by comparing version strings.
+- [ ] **24.** The CI matrix omits Python 3.14, though `requires-python` admits it and the docs say it is covered.
 
 ---
 
@@ -356,3 +360,56 @@ and raised `TypeError: unhashable type`. `validate_budget` runs outside the engi
 **Fix:** `validate_question` now calls laya's own `Agent._check_question` after Jev's rules. It
 refuses null, non-scalar and duplicate labels with a `ValueError` that becomes a 422, before any
 tokenizing. `tests/test_validation.py::TestLayasOwnRules` covers it.
+
+## 21. Python pinned twice in the Dockerfile
+
+**Severity:** medium · **Status:** fixed — both stages build from one `python:` base · `Dockerfile`
+
+The builder stage ran on `ghcr.io/astral-sh/uv:0.9.30-python3.12-bookworm-slim` and the runtime
+on `python:3.12-slim`. The builder's venv is copied into the runtime, and its `python` symlink
+resolves to the runtime's interpreter, so the two pins had to move together. Dependabot's PR #14
+moved only the runtime to `3.14-slim`; a test build showed the venv could no longer import
+anything under `lib/python3.12/site-packages`, so the container would die at startup on
+`uvicorn`. CI passed it (see issue 22).
+
+**Fix:** PR #24. Both stages build `FROM base`, a bare `python:3.12-slim` stage that is the file's
+only `python:` line, and uv is copied in from its own image. The Dependabot rule from PR #21 that
+skips minor Python bumps stays, because the image must also run a version the CI matrix tests.
+
+## 22. CI never builds the Docker image
+
+**Severity:** low · **Status:** open · `.github/workflows/tests.yml`
+
+Nothing on the pull-request path runs `docker build`. `make release` builds and smoke-tests the
+image, but only at release time, so a Dockerfile change or a lockfile change that breaks the
+CPU-only install is first caught there, or not at all if someone runs a bare `docker-push`.
+Issue 21's fix removes the failure that actually happened; this is the gap that let it pass.
+
+**Fix:** a job that runs `docker build` and probes `/ready` on pull requests that touch the
+`Dockerfile`, `uv.lock` or `pyproject.toml`.
+
+## 23. Release-date fallback compares versions as strings
+
+**Severity:** low · **Status:** open · `models.py`
+
+When the installed laya has no entry in `LAYA_RELEASE_DATES`, `_release_date()` reports
+`LAYA_RELEASE_DATES[max(LAYA_RELEASE_DATES)]`. `max` compares the keys as strings, so once a
+two-digit release such as `0.4.10` is recorded, `"0.4.7"` sorts above it and the fallback reports
+the older date. The fallback is reached only when a laya outside the lockfile is installed, since
+`test_models.py` fails CI on an unrecorded version, and laya shipped 0.4.4 to 0.4.7 within three
+days.
+
+**Fix:** pick the newest key by parsed version, for example `max(..., key=Version)` with
+`packaging.version.Version`, and add a test with a two-digit release.
+
+## 24. CI matrix omits a supported Python
+
+**Severity:** low · **Status:** open · `.github/workflows/tests.yml`, `README.md`
+
+The matrix runs 3.12 and 3.13, and both its comment and the README's CI section describe that as
+every version `requires-python` claims to support. `requires-python = ">=3.12"` also admits 3.14,
+released in October 2025, so users on 3.14 run an untested interpreter while the docs say
+otherwise.
+
+**Fix:** add 3.14 to the matrix, along with the README badge and the required checks, or cap
+`requires-python` below 3.14 until it is tested.

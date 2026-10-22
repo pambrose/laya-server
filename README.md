@@ -127,7 +127,7 @@ curl -s localhost:8000/v1/models | jq
     {
       "name": "jev-latest",
       "description": "Alias: routes by script and language detection to a Laya checkpoint.",
-      "release_date": "2026-09-20"
+      "release_date": "2026-10-14"
     },
     ...
   ]
@@ -355,6 +355,12 @@ would leave pull requests pending forever.
 Dockerfile base images weekly. It waits 7 days after a release before proposing it, so a bad or
 compromised release has time to be noticed and yanked first, and it updates SHA-pinned actions
 together with their version comments.
+
+The one thing it does not propose is a new minor version of Python for the image, because the
+image must run a Python the CI matrix tests. That bump is made by hand. The Dockerfile's single
+`FROM python:` line sets the version for both build stages, so it is the only line to change for
+a version the matrix already covers. A newer version goes into the matrix first, together with the
+badge at the top of this README and the required checks above.
 
 Linting covers `src/`, `tests/` and `scripts/`.
 
