@@ -23,6 +23,7 @@ LAYA_RELEASE_DATES: dict[str, str] = {
     "0.4.1": "2026-10-08",
     "0.4.3": "2026-10-11",
     "0.4.7": "2026-10-14",
+    "0.4.11": "2026-10-17",
 }
 
 
@@ -31,7 +32,9 @@ def _release_date() -> str:
     installed = version("laya")
     if installed in LAYA_RELEASE_DATES:
         return LAYA_RELEASE_DATES[installed]
-    return LAYA_RELEASE_DATES[max(LAYA_RELEASE_DATES)]
+    # The newest by date, not by key: version strings compare as text, so
+    # "0.4.7" sorts after "0.4.11".
+    return max(LAYA_RELEASE_DATES.values())
 
 
 _ALIAS_DESCRIPTION = (

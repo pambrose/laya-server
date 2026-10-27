@@ -67,7 +67,7 @@ class TestPerQuestionBudget:
 
 class TestOptionBudget:
     """Issue 1/2: Laya raises ValueError when a question's options do not fit
-    the sequence (agent.py:1157-1173). Jev's 255-option limit is looser, so this
+    the sequence (agent.py:1162-1178). Jev's 255-option limit is looser, so this
     is caught here, before the request queues for a checkpoint."""
 
     @staticmethod
@@ -115,7 +115,7 @@ class TestMatchesLayasEncoding:
     """The budget must be computed on exactly what laya will encode."""
 
     def test_noul_criteria_case_does_not_change_the_room(self, agent):
-        """laya lowercases noul keys (agent.py:1110-1112). The server's old
+        """laya lowercases noul keys (agent.py:1115-1117). The server's old
         mirror of `_to_internal` did not, so it saw no criteria at all and
         over-reported the room by the length of both descriptions."""
 
@@ -131,7 +131,7 @@ class TestMatchesLayasEncoding:
         )
 
     def test_mask_token_text_in_state_is_not_counted(self, agent):
-        """laya replaces it with a space before encoding (agent.py:1145-1149)."""
+        """laya replaces it with a space before encoding (agent.py:1150-1154)."""
         room = _room_for_state(agent, NOUL)
         state = "[MASK] " * 50 + " ".join(["word"] * room)
         validate_budget(agent, state, {"q": NOUL}, "english")

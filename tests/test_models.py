@@ -113,3 +113,18 @@ class TestReleaseDateTracksLaya:
 
         expected = LAYA_RELEASE_DATES[version("laya")]
         assert {m["release_date"] for m in list_models()["models"]} == {expected}
+
+    def test_an_unrecorded_version_reports_the_newest_recorded_date(self, monkeypatch):
+        # Keyed by version, the newest would be "0.4.7": as text it sorts
+        # after "0.4.11".
+        from laya_server import models
+
+        monkeypatch.setattr(
+            models,
+            "LAYA_RELEASE_DATES",
+            {"0.4.7": "2026-10-14", "0.4.11": "2026-10-17"},
+        )
+        monkeypatch.setattr(models, "version", lambda _: "0.4.99")
+        assert {m["release_date"] for m in models.list_models()["models"]} == {
+            "2026-10-17"
+        }

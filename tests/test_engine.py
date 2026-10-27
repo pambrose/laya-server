@@ -305,7 +305,7 @@ class TestWhatReachesLaya:
 class TestStateSerializedOnce:
     """Issue 8: the state was JSON-serialized in validation and again by laya,
     once per question. laya 0.4 serializes it once per call itself
-    (agent.py:1145-1149), so the server's pre-serialization was removed."""
+    (agent.py:1150-1154), so the server's pre-serialization was removed."""
 
     def test_inference_receives_the_state_as_sent(self):
         agent = FakeInferenceAgent()
