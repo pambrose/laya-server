@@ -16,7 +16,7 @@ class FakeTokenizer:
         self, text, add_special_tokens=False, truncation=False, max_length=None
     ):
         # laya 0.4 encodes each option with truncation=True, max_length=48
-        # (common.py:244-250); honoring it keeps option-heavy budgets faithful.
+        # (common.py:245-251); honoring it keeps option-heavy budgets faithful.
         ids = [4] * len(str(text).split())
         if truncation and max_length is not None:
             ids = ids[:max_length]
@@ -37,7 +37,7 @@ def agent():
     return FakeAgent()
 
 
-# Shaped like laya 0.4.1's output (agent.py:1392-1401, 1537-1568), including
+# Shaped like laya 0.4.1's output (agent.py:1397-1406, 1542-1573), including
 # the keys Jev does not have, so a test sees them leak if translation regresses.
 LAYA_NOUL_ANSWER = {
     "type": "noul",

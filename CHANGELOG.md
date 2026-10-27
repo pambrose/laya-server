@@ -7,6 +7,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Upgraded laya from 0.4.7 to 0.4.11; the minimum stays `laya>=0.4.1`. Answers are unchanged:
+  `presets.py` is identical across these releases. In the modules that load checkpoints and run
+  inference, `agent.py` now reads the option count from the sequence it built (the same
+  `render_options` count as before) and `common.py` gains a check on `ece_score`'s `bins`. The rest
+  is documentation, batch prediction and integrations this server does not use. `GET /v1/models`
+  now reports a `release_date` of `2026-10-17`.
+
 ## [0.2.1] - 2026-10-21
 
 ### Changed

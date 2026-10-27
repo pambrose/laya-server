@@ -493,7 +493,7 @@ wheels = [
 
 [[package]]
 name = "laya"
-version = "0.4.7"
+version = "0.4.11"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "huggingface-hub" },
@@ -502,9 +502,9 @@ dependencies = [
     { name = "torch" },
     { name = "transformers" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ed/ba/477174d38f2acc252cb1414499369b2127cf74784a5ffaf51e8743400c82/laya-0.4.7.tar.gz", hash = "sha256:c3f567f21ce9860eb063c67b35316d5498881e6856f6d58f2b05ce4311e8b2c9", size = 1194323, upload-time = "2026-10-14T05:27:58.872Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/66/9d/497b9f83533b36889760f9c5f1b8ddcc039486d118f97ccebb617c6ee60e/laya-0.4.11.tar.gz", hash = "sha256:e1c21be62dce9a3f1102e053d48c85951215a36bdb99adf8fa79271a152fe855", size = 1297759, upload-time = "2026-10-17T17:03:22.986Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3e/6e/4034dff73797ebe6ed7f0ae55bc85d866a6daa4778fdcad25a83827cc353/laya-0.4.7-py3-none-any.whl", hash = "sha256:c16f6e8b124baefa0d3d08a4eeb72c72ac54b06281155f383f7c8b7f37b91b50", size = 400060, upload-time = "2026-10-14T05:27:56.774Z" },
+    { url = "https://files.pythonhosted.org/packages/c1/b2/b7b8b28604956dcad36867fe23bd4a1b5516cda169fe3e4359f2393afccd/laya-0.4.11-py3-none-any.whl", hash = "sha256:9ea30fb344ec12601447ad90b56b39f01dff8f3ee8784e0f8f4ebc5a43c48c07", size = 430896, upload-time = "2026-10-17T17:03:21.184Z" },
 ]
 
 [[package]]

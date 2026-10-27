@@ -135,7 +135,7 @@ tokenizer (truncation settings) while encoding.
 
 `laya` has no online API docs. Read the installed source at
 `.venv/lib/python3.12/site-packages/laya/` (`router.py`, `agent.py`, `common.py`, `presets.py`,
-`confidence.py`) rather than guessing. Line numbers cited in `src/` and `tests/` are to laya 0.4.7.
+`confidence.py`) rather than guessing. Line numbers cited in `src/` and `tests/` are to laya 0.4.11.
 Note the yes/no primitive is spelled `noul` — it looks like a typo and is not.
 
 `docs/running-laya-outside-python.md` already documents the model itself: a ModernBERT encoder

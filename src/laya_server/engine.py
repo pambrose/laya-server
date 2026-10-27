@@ -2,7 +2,7 @@
 
 Laya 0.3.4 had no locking at all, and this module existed to make it safe.
 Laya 0.4 locks the Router's lifecycle itself (router.py:759-773, 914-1033) and
-makes inference on one Agent re-entrant (agent.py:167-212; common.py:41-91),
+makes inference on one Agent re-entrant (agent.py:166-211; common.py:42-92),
 so what remains here is policy rather than protection:
 
   * every checkpoint is preloaded at startup, and max_loaded is raised to cover
@@ -93,7 +93,7 @@ class Engine:
 
         The device is read from a loaded agent rather than from settings,
         because Laya downgrades an unavailable cuda/mps to cpu with only a
-        RuntimeWarning on stderr (agent.py:634-660). Reporting the configured
+        RuntimeWarning on stderr (agent.py:639-665). Reporting the configured
         value would hide that.
         """
         # Sorted, and read without Router.load(): load() calls _touch(), which
@@ -107,7 +107,7 @@ class Engine:
         # Per checkpoint: Agent.device is per agent, so one checkpoint can be
         # on cpu while another is still on cuda. An OOM fallback during a
         # request is now scoped to it and restored afterwards
-        # (agent.py:1251-1299); only a failed restore sticks (agent.py:953-958).
+        # (agent.py:1256-1304); only a failed restore sticks (agent.py:958-963).
         # Reporting a single agent's device would hide exactly the downgrade
         # this is here to show.
         devices = {
@@ -176,7 +176,7 @@ class Engine:
                     raw = await self._run_inference(agent, state, questions)
                 except (ValueError, KeyError, AttributeError, TypeError) as exc:
                     # Laya has no exception types of its own: input it refuses
-                    # arrives as ValueError or TypeError (agent.py:963-1102,
+                    # arrives as ValueError or TypeError (agent.py:968-1107,
                     # 1463-1475), and validation should have caught it first.
                     # This is the backstop for whatever it has not learned
                     # about yet. The request caused it, so report 422 rather
