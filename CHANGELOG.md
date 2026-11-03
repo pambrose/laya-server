@@ -9,12 +9,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Upgraded laya from 0.4.7 to 0.4.11; the minimum stays `laya>=0.4.1`. Answers are unchanged:
+- Upgraded laya from 0.4.7 to 0.4.15; the minimum stays `laya>=0.4.1`. Answers are unchanged:
   `presets.py` is identical across these releases. In the modules that load checkpoints and run
   inference, `agent.py` now reads the option count from the sequence it built (the same
-  `render_options` count as before) and `common.py` gains a check on `ece_score`'s `bins`. The rest
-  is documentation, batch prediction and integrations this server does not use. `GET /v1/models`
-  now reports a `release_date` of `2026-10-17`.
+  `render_options` count as before), `common.py` gains a check on `ece_score`'s `bins`, and 0.4.15
+  speeds up the confidence score and batch collation without changing any value the server
+  reports. The rest is documentation, long-document and batch prediction, and integrations this
+  server does not use. `GET /v1/models` now reports a `release_date` of `2026-10-24`.
+- Routing for `jev-*` models recognizes more English. laya 0.4.14 grew its English word list from
+  34 to 116 words ("how", "could", "they", "never", ...), so short English states it used to call
+  undecided are now identified as English. With the default `LAYA_SERVER_DEFAULT_CHECKPOINT` of
+  `english` they reach the same checkpoint as before; a server that sets it to `multilingual` now
+  sends them to `english` instead.
 
 ## [0.2.1] - 2026-10-21
 

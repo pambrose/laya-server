@@ -150,10 +150,10 @@ class Engine:
         # what the model is shown (see validation.JEV_QUESTION_FIELDS).
         questions = jev_questions(questions)
 
-        # Routing is pure and loads nothing (router.py:1175-1299), so it happens
+        # Routing is pure and loads nothing (router.py:1175-1307), so it happens
         # outside the lock: that is what lets different checkpoints run at once.
         # Offloaded because language detection now reads every leaf of a
-        # structured state (lang.py:808-862) where 0.3.4 stopped at 4000 chars.
+        # structured state (lang.py:979-1052) where 0.3.4 stopped at 4000 chars.
         decision = await run_in_threadpool(
             self._router.route, state, questions, model=model
         )

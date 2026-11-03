@@ -282,7 +282,7 @@ class TestWhatReachesLaya:
 
     def test_routing_runs_off_the_event_loop(self):
         """Detection reads every leaf of a structured state in laya 0.4
-        (lang.py:808-862), so a large one would stall the loop and the probes."""
+        (lang.py:979-1052), so a large one would stall the loop and the probes."""
         import threading
 
         threads = {}
@@ -316,7 +316,7 @@ class TestStateSerializedOnce:
 
     def test_routing_still_sees_the_original_structure(self):
         """Language detection walks dict/list leaves and ignores keys
-        (lang.py:808-862), so it must not be handed the JSON text."""
+        (lang.py:979-1052), so it must not be handed the JSON text."""
         router = FakeRouter()
         predict(engine(router), state={"body": "billed twice"})
         assert router.route_calls[0]["state"] == {"body": "billed twice"}
