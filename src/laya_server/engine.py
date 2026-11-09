@@ -1,7 +1,7 @@
 """Owns the Laya Router and decides how requests share it.
 
 Laya 0.3.4 had no locking at all, and this module existed to make it safe.
-Laya 0.4 locks the Router's lifecycle itself (router.py:759-773, 914-1033) and
+Laya 0.4 locks the Router's lifecycle itself (router.py:775-789, 942-1061) and
 makes inference on one Agent re-entrant (agent.py:166-211; common.py:42-92),
 so what remains here is policy rather than protection:
 
@@ -75,7 +75,7 @@ class Engine:
 
         # Sized for every checkpoint, not just the preloaded ones: routing can
         # reach any of them, and a tight max_loaded would evict a resident
-        # checkpoint to make room (router.py:1007-1033), rebuilding it from
+        # checkpoint to make room (router.py:1035-1061), rebuilding it from
         # scratch on its next request.
         router = laya.Router(
             device=settings.device,
@@ -93,12 +93,12 @@ class Engine:
 
         The device is read from a loaded agent rather than from settings,
         because Laya downgrades an unavailable cuda/mps to cpu with only a
-        RuntimeWarning on stderr (agent.py:639-665). Reporting the configured
+        RuntimeWarning on stderr (agent.py:684-710). Reporting the configured
         value would hide that.
         """
         # Sorted, and read without Router.load(): load() calls _touch(), which
-        # reorders the very list `loaded` reports (router.py:1001-1005,
-        # 1150-1153), so a probe would change what the next probe sees. Reading
+        # reorders the very list `loaded` reports (router.py:1029-1033,
+        # 1178-1181), so a probe would change what the next probe sees. Reading
         # the agent store directly is observation without mutation; Laya
         # offers no public accessor for it.
         loaded = sorted(self._router.loaded)
@@ -107,7 +107,7 @@ class Engine:
         # Per checkpoint: Agent.device is per agent, so one checkpoint can be
         # on cpu while another is still on cuda. An OOM fallback during a
         # request is now scoped to it and restored afterwards
-        # (agent.py:1256-1304); only a failed restore sticks (agent.py:958-963).
+        # (agent.py:1316-1364); only a failed restore sticks (agent.py:1018-1023).
         # Reporting a single agent's device would hide exactly the downgrade
         # this is here to show.
         devices = {
@@ -150,10 +150,10 @@ class Engine:
         # what the model is shown (see validation.JEV_QUESTION_FIELDS).
         questions = jev_questions(questions)
 
-        # Routing is pure and loads nothing (router.py:1175-1307), so it happens
+        # Routing is pure and loads nothing (router.py:1203-1337), so it happens
         # outside the lock: that is what lets different checkpoints run at once.
         # Offloaded because language detection now reads every leaf of a
-        # structured state (lang.py:979-1052) where 0.3.4 stopped at 4000 chars.
+        # structured state (lang.py:991-1064) where 0.3.4 stopped at 4000 chars.
         decision = await run_in_threadpool(
             self._router.route, state, questions, model=model
         )
@@ -176,8 +176,8 @@ class Engine:
                     raw = await self._run_inference(agent, state, questions)
                 except (ValueError, KeyError, AttributeError, TypeError) as exc:
                     # Laya has no exception types of its own: input it refuses
-                    # arrives as ValueError or TypeError (agent.py:968-1107,
-                    # 1463-1475), and validation should have caught it first.
+                    # arrives as ValueError or TypeError (agent.py:1028-1167,
+                    # 1523-1535), and validation should have caught it first.
                     # This is the backstop for whatever it has not learned
                     # about yet. The request caused it, so report 422 rather
                     # than letting a caller trigger a 500. RuntimeError is left

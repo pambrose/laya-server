@@ -9,18 +9,29 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Upgraded laya from 0.4.7 to 0.4.15; the minimum stays `laya>=0.4.1`. Answers are unchanged:
+- Upgraded laya from 0.4.7 to 0.4.21; the minimum stays `laya>=0.4.1`. Answers are unchanged:
   `presets.py` is identical across these releases. In the modules that load checkpoints and run
   inference, `agent.py` now reads the option count from the sequence it built (the same
-  `render_options` count as before), `common.py` gains a check on `ece_score`'s `bins`, and 0.4.15
-  speeds up the confidence score and batch collation without changing any value the server
+  `render_options` count as before), `common.py` gains a check on `ece_score`'s `bins` and treats
+  a temperature too wide for a double as the neutral fallback instead of crashing the load, and
+  0.4.15 speeds up the confidence score and batch collation without changing any value the server
   reports. The rest is documentation, long-document and batch prediction, and integrations this
-  server does not use. `GET /v1/models` now reports a `release_date` of `2026-10-24`.
+  server does not use. `GET /v1/models` now reports a `release_date` of `2026-11-01`.
 - Routing for `jev-*` models recognizes more English. laya 0.4.14 grew its English word list from
   34 to 116 words ("how", "could", "they", "never", ...), so short English states it used to call
   undecided are now identified as English. With the default `LAYA_SERVER_DEFAULT_CHECKPOINT` of
   `english` they reach the same checkpoint as before; a server that sets it to `multilingual` now
   sends them to `english` instead.
+- Routing for `jev-*` models recognizes more Vietnamese. laya's non-English letter set gained the
+  Vietnamese tone-marked letters (`ả`, `ạ`, `ề`, `ơ`, `ư`, ...). A state whose only diacritics are
+  those letters, such as "Cảm ơn bạn nhiều", used to be undecided and now goes to `multilingual`;
+  with the default `LAYA_SERVER_DEFAULT_CHECKPOINT` of `english` it used to reach `english`.
+  English text stays on `english` only while at most one word carries such a letter, so "a great
+  phở at the café", whose `phở` did not count before, moves from `english` to `multilingual`
+  whichever default is set. With a single such word it still reaches `english`.
+- On CUDA, a `LAYA_CUDA_AMP` value laya cannot parse now fails the checkpoint load; laya used to
+  ignore it and use the checkpoint's own precision. `fp32` and `float32` are newly accepted and
+  turn autocast off.
 
 ## [0.2.1] - 2026-10-21
 

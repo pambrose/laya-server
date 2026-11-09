@@ -37,7 +37,7 @@ def agent():
     return FakeAgent()
 
 
-# Shaped like laya 0.4.1's output (agent.py:1397-1406, 1542-1573), including
+# Shaped like laya 0.4.1's output (agent.py:1457-1466, 1602-1633), including
 # the keys Jev does not have, so a test sees them leak if translation regresses.
 LAYA_NOUL_ANSWER = {
     "type": "noul",
@@ -112,7 +112,7 @@ class LoadedFakeRouter(FakeRouter):
     """FakeRouter that reports resident checkpoints, as `laya.Router` does.
 
     `loaded` mirrors laya's `_order` list and `load()` reorders it through the
-    same `_touch` semantics (router.py:1001-1005). The earlier version returned a
+    same `_touch` semantics (router.py:1029-1033). The earlier version returned a
     fixed list, which made it more forgiving than the real Router and hid a bug
     where a read-only probe reordered what the next probe reported.
     """
