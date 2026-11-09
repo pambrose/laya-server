@@ -16,41 +16,41 @@ class TestLayaCrashModes:
     one itself with a ValueError, at the agent.py lines cited."""
 
     def test_missing_type_rejected(self):
-        # agent.py:985-987
+        # agent.py:1045-1047
         assert "type" in expect_rejected({"q": {"instructions": "Is it urgent?"}})
 
     def test_unknown_type_rejected(self):
-        # agent.py:985-987
+        # agent.py:1045-1047
         msg = expect_rejected({"q": {"type": "bool", "instructions": "Urgent?"}})
         assert "bool" in msg
 
     def test_missing_instructions_rejected(self):
-        # agent.py:988-989
+        # agent.py:1048-1049
         assert "instructions" in expect_rejected({"q": {"type": "noul"}})
 
     def test_choice_with_null_criteria_rejected(self):
-        # agent.py:1002-1004
+        # agent.py:1062-1064
         msg = expect_rejected(
             {"q": {"type": "choice", "instructions": "Which?", "criteria": None}}
         )
         assert "criteria" in msg
 
     def test_choice_with_empty_criteria_rejected(self):
-        # agent.py:1005-1006
+        # agent.py:1065-1066
         msg = expect_rejected(
             {"q": {"type": "choice", "instructions": "Which?", "criteria": {}}}
         )
         assert "criteria" in msg
 
     def test_score_with_empty_criteria_rejected(self):
-        # agent.py:1066-1067
+        # agent.py:1126-1127
         msg = expect_rejected(
             {"q": {"type": "score", "instructions": "How bad?", "criteria": []}}
         )
         assert "criteria" in msg
 
     def test_noul_with_list_criteria_rejected(self):
-        # agent.py:1071-1073
+        # agent.py:1131-1133
         msg = expect_rejected(
             {
                 "q": {
@@ -160,7 +160,7 @@ class TestValidRequests:
         )
 
     def test_choice_with_list_criteria_is_valid(self):
-        """Coerced to {c: None} at agent.py:1113-1114."""
+        """Coerced to {c: None} at agent.py:1173-1174."""
         validate_questions(
             {"q": {"type": "choice", "instructions": "Which?", "criteria": ["a", "b"]}}
         )
@@ -176,7 +176,7 @@ class TestValidRequests:
         )
 
     def test_noul_criteria_keys_are_case_insensitive(self):
-        """laya lowercases them (agent.py:1115-1117)."""
+        """laya lowercases them (agent.py:1175-1177)."""
         validate_questions(
             {
                 "q": {
