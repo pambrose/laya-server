@@ -156,7 +156,7 @@ class TestBackpressure:
 
 class TestRouterConstruction:
     def test_max_loaded_covers_all_checkpoints_with_subset_preload(self, monkeypatch):
-        """Laya evicts LRU when max_loaded is tight (router.py:1035-1061), and an
+        """Laya evicts LRU when max_loaded is tight (router.py:1117-1143), and an
         evicted checkpoint is rebuilt from scratch on its next request. Routing
         can reach any checkpoint regardless of what was preloaded, so the cache
         must be sized for all of them, not just the preloaded subset."""
@@ -167,7 +167,7 @@ class TestRouterConstruction:
         built = {}
 
         class RecordingRouter(FakeRouter):
-            def __init__(self, device=None, max_loaded=None, default=None):
+            def __init__(self, device=None, max_loaded=None, default=None, vega="auto"):
                 super().__init__()
                 built["max_loaded"] = max_loaded
                 built["device"] = device
@@ -186,7 +186,7 @@ class TestRouterConstruction:
         routers = []
 
         class RecordingRouter(FakeRouter):
-            def __init__(self, device=None, max_loaded=None, default=None):
+            def __init__(self, device=None, max_loaded=None, default=None, vega="auto"):
                 super().__init__()
                 routers.append(self)
 
@@ -216,7 +216,7 @@ class TestRouterConstruction:
         built = {}
 
         class RecordingRouter(FakeRouter):
-            def __init__(self, device=None, max_loaded=None, default=None):
+            def __init__(self, device=None, max_loaded=None, default=None, vega="auto"):
                 super().__init__()
                 built["default"] = default
 
@@ -225,6 +225,45 @@ class TestRouterConstruction:
         Engine.create(Settings.from_env(env))
 
         assert built["default"] == expected
+
+    def test_vega_lane_is_always_switched_off(self, monkeypatch):
+        """laya 0.4.25's own default, vega="auto", is on whenever vegaml is
+        installed, and laya now installs it. Inheriting it would let a
+        dependency bump send long states to a model the server does not serve."""
+        import laya
+
+        from laya_server.config import Settings
+
+        built = {}
+
+        class RecordingRouter(FakeRouter):
+            def __init__(self, device=None, max_loaded=None, default=None, vega="auto"):
+                super().__init__()
+                built["vega"] = vega
+
+        monkeypatch.setattr(laya, "Router", RecordingRouter)
+
+        Engine.create(Settings.from_env({}))
+
+        assert built["vega"] is False
+
+    def test_a_long_state_routes_to_an_encoder_checkpoint(self, monkeypatch):
+        """With laya's real Router, as Engine.create builds it. A state past
+        vega's ~8192-token threshold must still reach a served checkpoint, so
+        that validate_budget can reject it with a 422. Routing is pure and the
+        preload is stubbed out, so nothing is downloaded."""
+        import laya
+
+        from laya_server.config import ALL_CHECKPOINTS, Settings
+
+        monkeypatch.setattr(laya.Router, "preload", lambda self, names=None: None)
+        router = Engine.create(Settings.from_env({}))._router
+        state = "Please call me back today about the invoice. " * 1200
+
+        decision = router.route(state, QUESTIONS)
+
+        assert decision["model"] == "english"
+        assert decision["model"] in ALL_CHECKPOINTS
 
 
 class TestLayaErrorsBecome422:
@@ -282,7 +321,7 @@ class TestWhatReachesLaya:
 
     def test_routing_runs_off_the_event_loop(self):
         """Detection reads every leaf of a structured state in laya 0.4
-        (lang.py:991-1064), so a large one would stall the loop and the probes."""
+        (lang.py:1003-1077), so a large one would stall the loop and the probes."""
         import threading
 
         threads = {}
@@ -305,7 +344,7 @@ class TestWhatReachesLaya:
 class TestStateSerializedOnce:
     """Issue 8: the state was JSON-serialized in validation and again by laya,
     once per question. laya 0.4 serializes it once per call itself
-    (agent.py:1210-1214), so the server's pre-serialization was removed."""
+    (agent.py:1227-1231), so the server's pre-serialization was removed."""
 
     def test_inference_receives_the_state_as_sent(self):
         agent = FakeInferenceAgent()
@@ -316,7 +355,7 @@ class TestStateSerializedOnce:
 
     def test_routing_still_sees_the_original_structure(self):
         """Language detection walks dict/list leaves and ignores keys
-        (lang.py:991-1064), so it must not be handed the JSON text."""
+        (lang.py:1003-1077), so it must not be handed the JSON text."""
         router = FakeRouter()
         predict(engine(router), state={"body": "billed twice"})
         assert router.route_calls[0]["state"] == {"body": "billed twice"}

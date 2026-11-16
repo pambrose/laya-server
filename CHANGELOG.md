@@ -9,14 +9,27 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Upgraded laya from 0.4.7 to 0.4.21; the minimum stays `laya>=0.4.1`. Answers are unchanged:
-  `presets.py` is identical across these releases. In the modules that load checkpoints and run
-  inference, `agent.py` now reads the option count from the sequence it built (the same
-  `render_options` count as before), `common.py` gains a check on `ece_score`'s `bins` and treats
-  a temperature too wide for a double as the neutral fallback instead of crashing the load, and
-  0.4.15 speeds up the confidence score and batch collation without changing any value the server
-  reports. The rest is documentation, long-document and batch prediction, and integrations this
-  server does not use. `GET /v1/models` now reports a `release_date` of `2026-11-01`.
+- Upgraded laya from 0.4.7 to 0.4.30, and raised the minimum from `laya>=0.4.1` to
+  `laya>=0.4.25`, the first release with the `vega` argument the server now passes (below).
+  Answers are unchanged: `presets.py` is identical across these releases. In the modules that load
+  checkpoints and run inference, `agent.py` now reads the option count from the sequence it built
+  (the same `render_options` count as before), `common.py` gains a check on `ece_score`'s `bins`
+  and treats a temperature too wide for a double as the neutral fallback instead of crashing the
+  load, and 0.4.15 speeds up the confidence score and batch collation without changing any value
+  the server reports. 0.4.30 adds CPU-only fast paths for the decision head and, from 512 tokens,
+  for the encoder's sliding-window attention; the ONNX answer-parity check
+  (`scripts/verify_parity.py`) still passes on CPU for `english`, `multilingual` and
+  `typed-decisions`, including a 512-token state that takes the windowed path. The rest is
+  documentation, long-document and batch prediction, and integrations this server does not use.
+  laya now depends on `vegaml`, which adds it and `cryptography` (about 12 MB) to the install.
+  `GET /v1/models` now reports a `release_date` of `2026-11-08`.
+- The server turns off laya's new vega lane. Since 0.4.25, laya's `Router` defaults to
+  `vega="auto"`, which is on whenever `vegaml` is installed, and laya now installs it. That lane
+  routes any state past about 8192 estimated tokens to a separate vegaml model that is none of the
+  checkpoints this server serves. Inherited, a long state that has always been a 422 ("state
+  exceeds model budget") would instead have been routed to `vega`, and loading it downloads that
+  model in the middle of the request and evicts a resident checkpoint. The server now builds its
+  `Router` with `vega=False`, so routing and the 422 behave as they did on 0.4.21.
 - Routing for `jev-*` models recognizes more English. laya 0.4.14 grew its English word list from
   34 to 116 words ("how", "could", "they", "never", ...), so short English states it used to call
   undecided are now identified as English. With the default `LAYA_SERVER_DEFAULT_CHECKPOINT` of

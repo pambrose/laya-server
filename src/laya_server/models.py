@@ -15,7 +15,7 @@ from typing import Any
 from .engine import JEV_MODELS, LAYA_MODELS
 
 # PyPI upload dates for the laya releases whose checkpoints this server has
-# served. `pyproject.toml` pins `laya>=0.4.1`, so an upgrade can install a
+# served. `pyproject.toml` pins `laya>=0.4.25`, so an upgrade can install a
 # version that is not listed here; a test asserts the installed version is
 # present, which turns a silently stale `release_date` into a failing build.
 LAYA_RELEASE_DATES: dict[str, str] = {
@@ -26,6 +26,7 @@ LAYA_RELEASE_DATES: dict[str, str] = {
     "0.4.11": "2026-10-17",
     "0.4.15": "2026-10-24",
     "0.4.21": "2026-11-01",
+    "0.4.30": "2026-11-08",
 }
 
 

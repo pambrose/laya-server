@@ -1,12 +1,14 @@
 """Owns the Laya Router and decides how requests share it.
 
 Laya 0.3.4 had no locking at all, and this module existed to make it safe.
-Laya 0.4 locks the Router's lifecycle itself (router.py:775-789, 942-1061) and
-makes inference on one Agent re-entrant (agent.py:166-211; common.py:42-92),
+Laya 0.4 locks the Router's lifecycle itself (router.py:804-818, 1019-1143) and
+makes inference on one Agent re-entrant (agent.py:167-212; common.py:42-92),
 so what remains here is policy rather than protection:
 
   * every checkpoint is preloaded at startup, and max_loaded is raised to cover
     them, so no request pays for a build and nothing is evicted and rebuilt;
+  * routing reaches only those checkpoints: the Router's defaults that would
+    widen it (its fallback, its vega lane) are pinned rather than inherited;
   * each checkpoint has its own lock, so requests for one checkpoint run one
     at a time -- bounding CPU threads and GPU memory, and giving the queue
     depth limit something to count -- while different checkpoints run at once;
@@ -75,7 +77,7 @@ class Engine:
 
         # Sized for every checkpoint, not just the preloaded ones: routing can
         # reach any of them, and a tight max_loaded would evict a resident
-        # checkpoint to make room (router.py:1035-1061), rebuilding it from
+        # checkpoint to make room (router.py:1117-1143), rebuilding it from
         # scratch on its next request.
         router = laya.Router(
             device=settings.device,
@@ -84,6 +86,14 @@ class Engine:
             # multilingual in 0.4.0, which would silently reroute requests
             # whose language detection abstains.
             default=settings.default_checkpoint,
+            # Off, never laya's own: since 0.4.25 its default "auto" turns on
+            # a vega lane whenever vegaml is installed, which laya now
+            # depends on. That lane sends a state past ~8192 estimated tokens
+            # to a separate vegaml model (router.py:1384-1395) that is none
+            # of the checkpoints served here: `load` would download it on
+            # the event loop and evict a resident checkpoint, where the same
+            # request should be a 422 from `validate_budget`.
+            vega=False,
         )
         router.preload(list(settings.preload))
         return cls(router, settings)
@@ -93,12 +103,12 @@ class Engine:
 
         The device is read from a loaded agent rather than from settings,
         because Laya downgrades an unavailable cuda/mps to cpu with only a
-        RuntimeWarning on stderr (agent.py:684-710). Reporting the configured
+        RuntimeWarning on stderr (agent.py:701-727). Reporting the configured
         value would hide that.
         """
         # Sorted, and read without Router.load(): load() calls _touch(), which
-        # reorders the very list `loaded` reports (router.py:1029-1033,
-        # 1178-1181), so a probe would change what the next probe sees. Reading
+        # reorders the very list `loaded` reports (router.py:1111-1115,
+        # 1260-1263), so a probe would change what the next probe sees. Reading
         # the agent store directly is observation without mutation; Laya
         # offers no public accessor for it.
         loaded = sorted(self._router.loaded)
@@ -107,7 +117,7 @@ class Engine:
         # Per checkpoint: Agent.device is per agent, so one checkpoint can be
         # on cpu while another is still on cuda. An OOM fallback during a
         # request is now scoped to it and restored afterwards
-        # (agent.py:1316-1364); only a failed restore sticks (agent.py:1018-1023).
+        # (agent.py:1333-1381); only a failed restore sticks (agent.py:1035-1040).
         # Reporting a single agent's device would hide exactly the downgrade
         # this is here to show.
         devices = {
@@ -150,10 +160,10 @@ class Engine:
         # what the model is shown (see validation.JEV_QUESTION_FIELDS).
         questions = jev_questions(questions)
 
-        # Routing is pure and loads nothing (router.py:1203-1337), so it happens
+        # Routing is pure and loads nothing (router.py:1292-1460), so it happens
         # outside the lock: that is what lets different checkpoints run at once.
         # Offloaded because language detection now reads every leaf of a
-        # structured state (lang.py:991-1064) where 0.3.4 stopped at 4000 chars.
+        # structured state (lang.py:1003-1077) where 0.3.4 stopped at 4000 chars.
         decision = await run_in_threadpool(
             self._router.route, state, questions, model=model
         )
@@ -176,8 +186,8 @@ class Engine:
                     raw = await self._run_inference(agent, state, questions)
                 except (ValueError, KeyError, AttributeError, TypeError) as exc:
                     # Laya has no exception types of its own: input it refuses
-                    # arrives as ValueError or TypeError (agent.py:1028-1167,
-                    # 1523-1535), and validation should have caught it first.
+                    # arrives as ValueError or TypeError (agent.py:1045-1184,
+                    # 1543-1555), and validation should have caught it first.
                     # This is the backstop for whatever it has not learned
                     # about yet. The request caused it, so report 422 rather
                     # than letting a caller trigger a 500. RuntimeError is left
