@@ -87,7 +87,11 @@ one checkpoint's requests run one at a time (bounding CPU threads and GPU memory
 queue-depth limit something to count), and offloads routing, budget checks and the forward pass.
 Routing happens *outside* the lock because `Router.route` is pure — that is what lets different
 checkpoints run concurrently. It always passes `default=` explicitly: laya 0.4 moved its fallback
-for undecided language from `english` to `multilingual`. Any direct tokenizer call must go through
+for undecided language from `english` to `multilingual`. It likewise passes `vega=False`: since
+0.4.25 laya's own `vega="auto"` routes media, and any state past ~8192 estimated tokens, to a
+separate vegaml model that is not a checkpoint this server serves, and laya now installs vegaml
+itself. Check each laya bump for a new `Router` default that widens routing, and pin it.
+Any direct tokenizer call must go through
 `laya.common.encode_text`, which holds laya's tokenizer lock; laya now mutates the shared fast
 tokenizer (truncation settings) while encoding.
 
@@ -135,7 +139,7 @@ tokenizer (truncation settings) while encoding.
 
 `laya` has no online API docs. Read the installed source at
 `.venv/lib/python3.12/site-packages/laya/` (`router.py`, `agent.py`, `common.py`, `presets.py`,
-`confidence.py`) rather than guessing. Line numbers cited in `src/` and `tests/` are to laya 0.4.21.
+`confidence.py`) rather than guessing. Line numbers cited in `src/` and `tests/` are to laya 0.4.30.
 Note the yes/no primitive is spelled `noul` — it looks like a typo and is not.
 
 `docs/running-laya-outside-python.md` already documents the model itself: a ModernBERT encoder

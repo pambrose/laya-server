@@ -74,7 +74,7 @@ class TestResponse:
 
 
 class TestLaya04Additions:
-    """Keys laya 0.4 added to its output (agent.py:1418-1466, 1602-1627)."""
+    """Keys laya 0.4 added to its output (agent.py:1435-1483, 1622-1647)."""
 
     def test_answer_confidence_is_stripped(self):
         laya = {
@@ -108,7 +108,7 @@ class TestLaya04Additions:
 
 
 class TestScoreLegend:
-    """laya 0.4 renders every score level to text (agent.py:1445-1451)."""
+    """laya 0.4 renders every score level to text (agent.py:1462-1468)."""
 
     @staticmethod
     def _translate(criteria, laya_legend):
