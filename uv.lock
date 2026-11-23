@@ -641,7 +641,7 @@ wheels = [
 
 [[package]]
 name = "laya"
-version = "0.4.30"
+version = "0.4.34"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
@@ -652,9 +652,9 @@ dependencies = [
     { name = "transformers" },
     { name = "vegaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ca/21/f4a8a95188c2fa7f14d33e55d0b7789a826168e0781f3084b7224f11cecb/laya-0.4.30.tar.gz", hash = "sha256:54065c3d96314a28c1e7dc9c4e4889a09a6ecf3d0230023408a4ecb3966cbc1d", size = 1472147, upload-time = "2026-11-08T18:41:13.165Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/0e/e5/364b759c8abbe6b56f1be82399b1bbc48a003b1ed03610c03eaccb5e06bf/laya-0.4.34.tar.gz", hash = "sha256:c9903900f0ad9590f4e8ab844deb6e44719f35e797f2e63a29c9f9e0cdc8d846", size = 1483539, upload-time = "2026-11-15T18:06:39.336Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/42/04/712919decf037764fd1d1198fae87f2d6795a1ad10390193230bad0a5264/laya-0.4.30-py3-none-any.whl", hash = "sha256:d9408153b234d90c5729de69ed4cb8486979a812d6ae797bdf044d9e57c93288", size = 503506, upload-time = "2026-11-08T18:41:11.501Z" },
+    { url = "https://files.pythonhosted.org/packages/02/9a/a253b3181986caa4edeb2080f3029b9ddc37b2988e83bb789074f46adae0/laya-0.4.34-py3-none-any.whl", hash = "sha256:5f33077aa17dc228979937273be04c77bac61915c4e2266b07b47f6fab1badc9", size = 505536, upload-time = "2026-11-15T18:06:37.502Z" },
 ]
 
 [[package]]
