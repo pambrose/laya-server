@@ -9,7 +9,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Upgraded laya from 0.4.7 to 0.4.30, and raised the minimum from `laya>=0.4.1` to
+- Upgraded laya from 0.4.7 to 0.4.34, and raised the minimum from `laya>=0.4.1` to
   `laya>=0.4.25`, the first release with the `vega` argument the server now passes (below).
   Answers are unchanged: `presets.py` is identical across these releases. In the modules that load
   checkpoints and run inference, `agent.py` now reads the option count from the sequence it built
@@ -21,8 +21,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`scripts/verify_parity.py`) still passes on CPU for `english`, `multilingual` and
   `typed-decisions`, including a 512-token state that takes the windowed path. The rest is
   documentation, long-document and batch prediction, and integrations this server does not use.
+  0.4.31 to 0.4.34 leave `router.py`, `agent.py`, `common.py`, `presets.py` and `confidence.py`
+  byte-identical; they change only temperature and binning fitting (`Agent.calibrate`), the
+  opt-in option-stability hook, the vega lane the server turns off, and integrations.
   laya now depends on `vegaml`, which adds it and `cryptography` (about 12 MB) to the install.
-  `GET /v1/models` now reports a `release_date` of `2026-11-08`.
+  `GET /v1/models` now reports a `release_date` of `2026-11-15`.
 - The server turns off laya's new vega lane. Since 0.4.25, laya's `Router` defaults to
   `vega="auto"`, which is on whenever `vegaml` is installed, and laya now installs it. That lane
   routes any state past about 8192 estimated tokens to a separate vegaml model that is none of the
